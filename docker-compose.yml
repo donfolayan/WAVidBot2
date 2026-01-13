@@ -1,0 +1,84 @@
+services:
+  # WABotII FastAPI application
+  wabotii:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    container_name: wabotii
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_NAME=${APP_NAME}
+      - DEV_MODE=${DEV_MODE}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - PORT=${PORT}
+      - BASE_URL=${BASE_URL}
+      - WAHA_BASE_URL=${WAHA_BASE_URL}
+      - WAHA_API_KEY=${WAHA_API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - FILE_RETENTION_HOURS=${FILE_RETENTION_HOURS}
+      - CLOUDINARY_RETENTION_HOURS=${CLOUDINARY_RETENTION_HOURS}
+      - MAX_FILE_SIZE_MB=${MAX_FILE_SIZE_MB}
+      - DOWNLOAD_TIMEOUT_SECONDS=${DOWNLOAD_TIMEOUT_SECONDS}
+      - CLOUDINARY_URL=${CLOUDINARY_URL}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+    volumes:
+      - ./downloads:/app/downloads
+      - ./data:/app/data
+    depends_on:
+      - waha
+    networks:
+      - wabotii-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # WAHA (WhatsApp HTTP API) service
+  waha:
+    image: devlikeapro/waha:latest
+    container_name: waha
+    env_file:
+      - .env
+    ports:
+      # WAHA listens on 8000 in this image; map host 3000 to container 8000
+      - "3000:8000"
+    environment:
+      # Use WEBJS engine for browser-based (more reliable) or NOWEB for protocol-based (faster)
+      - WAHA_ENGINES=WEBJS
+      - LOG_LEVEL=debug
+      # Tell WAHA where to send incoming message webhooks (FastAPI service)
+      - WAHA_CALLBACK_URL=http://wabotii:8000/webhook
+      # Set development API key (must match client)
+      - WAHA_API_KEY=${WAHA_API_KEY}
+      # Set permanent credentials (won't change on restart)
+      - WAHA_DASHBOARD_USERNAME=${WAHA_DASHBOARD_USERNAME}
+      - WAHA_DASHBOARD_PASSWORD=${WAHA_DASHBOARD_PASSWORD}
+      - WHATSAPP_SWAGGER_USERNAME=${WHATSAPP_SWAGGER_USERNAME}
+      - WHATSAPP_SWAGGER_PASSWORD=${WHATSAPP_SWAGGER_PASSWORD}
+    volumes:
+      - ./waha-data:/app/sessions
+    networks:
+      - wabotii-network
+    healthcheck:
+      # WAHA listens on port 8000 inside the container
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+networks:
+  wabotii-network:
+    driver: bridge
+
+volumes:
+  waha-data:

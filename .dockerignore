@@ -1,0 +1,13 @@
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+*.db
+downloads/
+waha-data/
+youtube_cookies.txt
+facebook_cookies.txt
+.DS_Store
