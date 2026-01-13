@@ -7,6 +7,8 @@ from typing import Optional, List, Dict, Any
 class TestDownloadRequest(BaseModel):
     """Request for testing video download."""
 
+    __test__ = False  # prevent pytest from collecting this schema as a test class
+
     url: str = Field(..., description="Video URL to download")
 
     model_config = {
@@ -20,6 +22,8 @@ class TestDownloadRequest(BaseModel):
 
 class TestDownloadResponse(BaseModel):
     """Response for video download."""
+
+    __test__ = False  # prevent pytest from collecting this schema as a test class
 
     local_path: Optional[str] = Field(None, description="Local path of downloaded video")
     file_size_mb: Optional[float] = Field(None, description="File size in MB")

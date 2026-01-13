@@ -1,7 +1,13 @@
 """Application configuration using Pydantic Settings."""
 
-from pydantic_settings import BaseSettings
+import os
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+
+# Skip loading .env during pytest runs to keep tests independent of local secrets.
+ENV_FILE = None if "PYTEST_CURRENT_TEST" in os.environ else ".env"
 
 
 class Settings(BaseSettings):
@@ -19,6 +25,10 @@ class Settings(BaseSettings):
     waha_base_url: str = Field(default="http://localhost:3000", alias="WAHA_BASE_URL")
     waha_session_name: str = Field(default="default", alias="WAHA_SESSION_NAME")
     waha_api_key: str = Field(default="", alias="WAHA_API_KEY")
+    waha_dashboard_username: str = Field(default="", alias="WAHA_DASHBOARD_USERNAME")
+    waha_dashboard_password: str = Field(default="", alias="WAHA_DASHBOARD_PASSWORD")
+    whatsapp_swagger_username: str = Field(default="", alias="WHATSAPP_SWAGGER_USERNAME")
+    whatsapp_swagger_password: str = Field(default="", alias="WHATSAPP_SWAGGER_PASSWORD")
 
     # WhatsApp Webhook Verification
     verify_token: str = Field(default="wa_downloader_test_token", alias="VERIFY_TOKEN")
@@ -45,14 +55,13 @@ class Settings(BaseSettings):
     youtube_cookies_content: str = Field(default="", alias="YOUTUBE_COOKIES_CONTENT")
     facebook_cookies_content: str = Field(default="", alias="FACEBOOK_COOKIES_CONTENT")
 
-    class Config:
-        """Pydantic config."""
-
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
-        # Allow both alias and field names
-        populate_by_name = True
+    model_config = SettingsConfigDict(
+        env_file=ENV_FILE,
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        populate_by_name=True,
+        extra="ignore",
+    )
 
     def get_cloudinary_url(self) -> str | None:
         """Get the Cloudinary URL or construct from individual vars."""
@@ -68,6 +77,13 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production mode."""
         return not self.dev_mode
+
+    @classmethod
+    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
+        """Use only init and defaults during tests; otherwise include env and dotenv."""
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return (init_settings,)
+        return (init_settings, env_settings, dotenv_settings, file_secret_settings)
 
 
 def get_settings() -> Settings:
