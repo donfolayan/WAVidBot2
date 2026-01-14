@@ -1,0 +1,8 @@
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaap2lw6ehhztvxwgcecglcpaw7wxiluorq7j2xs3uupe6ywbvdfw2a"
+user_ocid        = "ocid1.user.oc1..aaaaaaaank6amulky3gkjmfzimdc2kq3jlmnvmksn5yhc43srbjit7d7yrkq"
+fingerprint      = "2e:a3:c2:6b:88:74:34:d8:ba:69:2e:f7:3e:3f:93:f3"
+private_key_path = "C:/Users/don/.oci/oci_tf_private.pem"
+region           = "af-johannesburg-1"
+availability_domain = "uMxE:AF-JOHANNESBURG-1-AD-1"
+compartment_id = "ocid1.tenancy.oc1..aaaaaaaap2lw6ehhztvxwgcecglcpaw7wxiluorq7j2xs3uupe6ywbvdfw2a"
+private_ip_id = "ocid1.privateip.oc1.af-johannesburg-1.abvg4ljrhngbilmbgsipsyabu3ueatvf27nhd2kcsr3etw6xqqwnjrh3a23q"
