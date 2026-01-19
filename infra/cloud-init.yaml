@@ -8,6 +8,7 @@ packages:
   - curl
   - git
   - docker.io
+  - docker-compose-plugin
   - wget
   - htop
 
