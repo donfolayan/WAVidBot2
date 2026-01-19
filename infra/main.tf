@@ -152,7 +152,6 @@ resource "oci_core_instance" "wabotii_instance" {
     subnet_id        = oci_core_subnet.wabotii_subnet.id
     display_name     = "wabotii-vnic"
     assign_public_ip = true # Free public IP included with instance
-    hostname_label   = "wabotii"
   }
 
   # SSH key and startup script
