@@ -161,8 +161,11 @@ jobs:
             sudo cloud-init status --wait
             
             # Verify Docker and docker-compose are available
-            docker --version
-            docker-compose --version
+            sudo docker --version
+            sudo docker-compose --version
+            
+            # Apply docker group to current session
+            sudo usermod -aG docker ubuntu
             
             # Navigate to app directory or clone if doesn't exist
             cd /home/ubuntu
@@ -189,31 +192,34 @@ jobs:
             fi
             
             # Stop existing containers
-            docker-compose down || true
+            sudo docker-compose down || true
             
             # Create environment file from secret
-            cat > .env << 'EOF'
+            sudo tee .env > /dev/null << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
             
             # Add DockerHub credentials to .env
-            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" >> .env
-            echo "DOCKERHUB_REPO=${{ secrets.DOCKERHUB_REPO }}" >> .env
+            echo "DOCKERHUB_USERNAME=${{ secrets.DOCKERHUB_USERNAME }}" | sudo tee -a .env > /dev/null
+            echo "DOCKERHUB_REPO=${{ secrets.DOCKERHUB_REPO }}" | sudo tee -a .env > /dev/null
+            
+            # Fix .env ownership
+            sudo chown ubuntu:ubuntu .env
             
             # Pull latest images
-            docker-compose pull
+            sudo docker-compose pull
             
             # Start services and wait for them to be ready
             echo "Starting containers..."
-            docker-compose up -d --wait --wait-timeout 300
+            sudo docker-compose up -d --wait --wait-timeout 300
             
             # Check status
-            docker-compose ps
+            sudo docker-compose ps
             
             # Verify containers are running
-            if [ $(docker-compose ps -q | wc -l) -eq 0 ]; then
+            if [ $(sudo docker-compose ps -q | wc -l) -eq 0 ]; then
               echo "❌ No containers running, checking logs..."
-              docker-compose logs --tail=50
+              sudo docker-compose logs --tail=50
               exit 1
             fi
             
@@ -228,4 +234,4 @@ jobs:
             done
             
             echo "✅ Deployment complete!"
-            docker-compose ps
+            sudo docker-compose ps
