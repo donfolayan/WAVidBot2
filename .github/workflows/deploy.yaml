@@ -20,19 +20,19 @@ jobs:
           python-version: '3.12'
 
       - name: Install uv
-        run: pip install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install dependencies
-        run: uv pip install --system -r <(uv pip compile pyproject.toml)
+        run: uv sync
 
       - name: Lint with ruff
-        run: ruff check . --fix || true
+        run: uv run ruff check . --fix || true
 
       - name: Format check with ruff
-        run: ruff format . --check || true
+        run: uv run ruff format . --check || true
 
       - name: Type check with mypy
-        run: mypy src/ --ignore-missing-imports || true
+        run: uv run mypy src/ --ignore-missing-imports || true
 
   build-and-push:
     name: Build and Push Docker Image
