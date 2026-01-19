@@ -107,12 +107,28 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Wait for SSH to be ready
+        run: |
+          echo "Waiting for SSH to be ready on ${{ needs.terraform.outputs.instance_ip }}..."
+          for i in {1..30}; do
+            if nc -zv ${{ needs.terraform.outputs.instance_ip }} 22 2>&1 | grep -q succeeded; then
+              echo "SSH is ready!"
+              sleep 10
+              exit 0
+            fi
+            echo "Attempt $i/30: SSH not ready yet, waiting 10s..."
+            sleep 10
+          done
+          echo "SSH did not become ready in time"
+          exit 1
+
       - name: SSH and deploy on Oracle VM
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ needs.terraform.outputs.instance_ip }}
           username: ubuntu
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
+          command_timeout: 30m
           script: |
             # Navigate to app directory or clone if doesn't exist
             cd /home/ubuntu
