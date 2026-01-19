@@ -1,4 +1,5 @@
 # Terraform files
+*.tfstate
 *.tfstate.backup
 *.tfvars
 !*.tfvars.example
