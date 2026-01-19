@@ -1,7 +1,8 @@
 """Tests for database service."""
 
-import tempfile
 import os
+import tempfile
+
 from src.wabotii.config.settings import Settings
 from src.wabotii.services.database import DatabaseService
 
@@ -11,8 +12,8 @@ def test_database_initialization():
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "test.db")
         settings = Settings(database_url=f"sqlite:///{db_path}")
-        
-        service = DatabaseService(settings)
+
+        DatabaseService(settings)
         assert os.path.exists(db_path)
 
 
@@ -48,7 +49,7 @@ def test_record_download():
             user_id=user_id,
             url="https://youtube.com/watch?v=test",
             video_title="Test Video",
-            file_size_mb=15.5
+            file_size_mb=15.5,
         )
 
         assert download_id > 0
@@ -72,7 +73,7 @@ def test_get_download_stats():
             user_id=user_id,
             url="https://youtube.com/watch?v=test",
             video_title="Test Video",
-            file_size_mb=10.0
+            file_size_mb=10.0,
         )
 
         # Check stats updated

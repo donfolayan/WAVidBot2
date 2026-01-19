@@ -2,9 +2,8 @@
 
 import os
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Skip loading .env during pytest runs to keep tests independent of local secrets.
 ENV_FILE = None if "PYTEST_CURRENT_TEST" in os.environ else ".env"
@@ -34,10 +33,7 @@ class Settings(BaseSettings):
     verify_token: str = Field(default="wa_downloader_test_token", alias="VERIFY_TOKEN")
 
     # Database Configuration
-    database_url: str = Field(
-        default="sqlite:///./wabotii.db",
-        alias="DATABASE_URL"
-    )
+    database_url: str = Field(default="sqlite:///./wabotii.db", alias="DATABASE_URL")
 
     # Cloudinary Configuration
     cloudinary_url: str = Field(default="", alias="CLOUDINARY_URL")
@@ -79,7 +75,9 @@ class Settings(BaseSettings):
         return not self.dev_mode
 
     @classmethod
-    def settings_customise_sources(cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings):
+    def settings_customise_sources(
+        cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
+    ):
         """Use only init and defaults during tests; otherwise include env and dotenv."""
         if "PYTEST_CURRENT_TEST" in os.environ:
             return (init_settings,)

@@ -1,7 +1,7 @@
 """Main entry point for WABotII application."""
 
 import uvicorn
-from src.wabotii.__main__ import app
+
 from src.wabotii.config.settings import get_settings
 
 
@@ -13,7 +13,7 @@ def main():
         host="0.0.0.0",
         port=settings.port,
         reload=settings.dev_mode,
-        log_level=settings.log_level.lower()
+        log_level=settings.log_level.lower(),
     )
 
 

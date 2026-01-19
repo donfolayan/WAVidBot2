@@ -1,10 +1,10 @@
 """Tests for API schemas."""
 
 from src.wabotii.api.schemas import (
+    HealthResponse,
     TestDownloadRequest,
     TestDownloadResponse,
     WebhookResponse,
-    HealthResponse
 )
 
 
@@ -17,10 +17,7 @@ def test_test_download_request():
 def test_test_download_response():
     """Test download response schema."""
     resp = TestDownloadResponse(
-        local_path="downloads/test.mp4",
-        file_size_mb=15.5,
-        title="Test Video",
-        duration=300
+        local_path="downloads/test.mp4", file_size_mb=15.5, title="Test Video", duration=300
     )
     assert resp.local_path == "downloads/test.mp4"
     assert resp.file_size_mb == 15.5
@@ -39,11 +36,7 @@ def test_webhook_response():
 
 def test_health_response():
     """Test health response schema."""
-    resp = HealthResponse(
-        status="healthy",
-        version="0.1.0",
-        waha_healthy=True
-    )
+    resp = HealthResponse(status="healthy", version="0.1.0", waha_healthy=True)
     assert resp.status == "healthy"
     assert resp.version == "0.1.0"
     assert resp.waha_healthy is True

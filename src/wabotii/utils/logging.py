@@ -1,8 +1,8 @@
 """Structured logging setup using structlog."""
 
 import logging
+
 import structlog
-from typing import Any
 
 
 def setup_logging(log_level: str = "INFO", dev_mode: bool = False) -> None:

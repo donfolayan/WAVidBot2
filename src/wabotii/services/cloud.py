@@ -1,12 +1,13 @@
 """Cloudinary service for cloud storage and file management."""
 
 import asyncio
-import cloudinary
-import cloudinary.uploader
-import cloudinary.api
-from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta
 from typing import Optional
+
+import cloudinary
+import cloudinary.api
+import cloudinary.uploader
 
 from ..config.settings import Settings
 from ..utils.logging import get_logger
@@ -29,16 +30,14 @@ class CloudinaryService:
                 cloud_name=settings.cloudinary_cloud_name,
                 api_key=settings.cloudinary_api_key,
                 api_secret=settings.cloudinary_api_secret,
-                secure=True
+                secure=True,
             )
             logger.info("Cloudinary service initialized", cloud_name=settings.cloudinary_cloud_name)
         else:
             logger.warning("Cloudinary not configured - uploads will be skipped")
 
     def upload_to_cloudinary(
-        self,
-        file_path: str,
-        folder: str = "wa-downloads"
+        self, file_path: str, folder: str = "wa-downloads"
     ) -> tuple[Optional[str], Optional[str]]:
         """Upload a file to Cloudinary synchronously."""
         try:
@@ -54,18 +53,14 @@ class CloudinaryService:
                 resource_type="video",
                 timeout=300,
                 overwrite=False,
-                invalidate=False
+                invalidate=False,
             )
 
             secure_url = result.get("secure_url")
             public_id = result.get("public_id")
 
             if secure_url:
-                logger.info(
-                    "File uploaded to Cloudinary",
-                    public_id=public_id,
-                    url=secure_url
-                )
+                logger.info("File uploaded to Cloudinary", public_id=public_id, url=secure_url)
                 return secure_url, public_id
 
             logger.error("Cloudinary upload failed - no URL in response", result=result)
@@ -75,23 +70,14 @@ class CloudinaryService:
             return None, None
 
     async def async_upload_to_cloudinary(
-        self,
-        file_path: str,
-        folder: str = "wa-downloads"
+        self, file_path: str, folder: str = "wa-downloads"
     ) -> tuple[Optional[str], Optional[str]]:
         """Upload a file to Cloudinary asynchronously."""
         loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            executor,
-            self.upload_to_cloudinary,
-            file_path,
-            folder
-        )
+        return await loop.run_in_executor(executor, self.upload_to_cloudinary, file_path, folder)
 
     def cleanup_cloudinary_files(
-        self,
-        folder: str = "wa-downloads",
-        retention_hours: Optional[int] = None
+        self, folder: str = "wa-downloads", retention_hours: Optional[int] = None
     ) -> None:
         """Delete Cloudinary files older than retention_hours."""
         if retention_hours is None:
@@ -106,10 +92,7 @@ class CloudinaryService:
             logger.info("Running Cloudinary cleanup", folder=folder, cutoff_time=cutoff)
 
             resources = cloudinary.api.resources(
-                type="upload",
-                prefix=folder,
-                resource_type="video",
-                max_results=500
+                type="upload", prefix=folder, resource_type="video", max_results=500
             )
 
             deleted_count = 0
@@ -128,10 +111,12 @@ class CloudinaryService:
                         logger.info(
                             "Deleted old Cloudinary file",
                             public_id=public_id,
-                            created_at=created_at
+                            created_at=created_at,
                         )
                     except Exception as e:
-                        logger.error("Error deleting Cloudinary file", public_id=public_id, error=str(e))
+                        logger.error(
+                            "Error deleting Cloudinary file", public_id=public_id, error=str(e)
+                        )
 
             logger.info("Cloudinary cleanup complete", deleted_count=deleted_count)
         except Exception as e:

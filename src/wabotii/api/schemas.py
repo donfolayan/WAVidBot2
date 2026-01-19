@@ -1,7 +1,8 @@
 """Pydantic schemas for API requests and responses."""
 
+from typing import Optional
+
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
 
 
 class TestDownloadRequest(BaseModel):
@@ -12,11 +13,7 @@ class TestDownloadRequest(BaseModel):
     url: str = Field(..., description="Video URL to download")
 
     model_config = {
-        "json_schema_extra": {
-            "example": {
-                "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-            }
-        }
+        "json_schema_extra": {"example": {"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}}
     }
 
 
@@ -38,7 +35,7 @@ class TestDownloadResponse(BaseModel):
                 "file_size_mb": 15.5,
                 "title": "Video Title",
                 "duration": 300,
-                "error": None
+                "error": None,
             }
         }
     }
@@ -52,10 +49,7 @@ class WebhookResponse(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "status": "ok",
-                "message": "Message processed successfully"
-            }
+            "example": {"status": "ok", "message": "Message processed successfully"}
         }
     }
 
@@ -72,7 +66,7 @@ class ErrorResponse(BaseModel):
             "example": {
                 "error": "Invalid URL",
                 "detail": "URL must be from YouTube or Facebook",
-                "request_id": "req_12345"
+                "request_id": "req_12345",
             }
         }
     }
@@ -87,11 +81,7 @@ class HealthResponse(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "status": "healthy",
-                "version": "0.1.0",
-                "waha_healthy": True
-            }
+            "example": {"status": "healthy", "version": "0.1.0", "waha_healthy": True}
         }
     }
 
@@ -105,10 +95,6 @@ class StatsResponse(BaseModel):
 
     model_config = {
         "json_schema_extra": {
-            "example": {
-                "total_downloads": 150,
-                "total_users": 25,
-                "total_size_mb": 2450.5
-            }
+            "example": {"total_downloads": 150, "total_users": 25, "total_size_mb": 2450.5}
         }
     }

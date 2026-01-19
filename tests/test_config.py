@@ -22,7 +22,7 @@ def test_cloudinary_url_construction():
     settings = Settings(
         cloudinary_api_key="key123",
         cloudinary_api_secret="secret456",
-        cloudinary_cloud_name="mycloud"
+        cloudinary_cloud_name="mycloud",
     )
     url = settings.get_cloudinary_url()
     assert "cloudinary://" in url

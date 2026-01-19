@@ -1,9 +1,9 @@
 """Database service for tracking downloads and users."""
 
 import sqlite3
-from datetime import datetime
-from typing import Optional, List
 from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Optional
 
 from ..config.settings import Settings
 from ..utils.logging import get_logger
@@ -101,10 +101,7 @@ class DatabaseService:
                 logger.debug("User found", phone_number=phone_number, user_id=user_id)
             else:
                 # Create new user
-                cursor.execute(
-                    "INSERT INTO users (phone_number) VALUES (?)",
-                    (phone_number,)
-                )
+                cursor.execute("INSERT INTO users (phone_number) VALUES (?)", (phone_number,))
                 conn.commit()
                 user_id = cursor.lastrowid
                 logger.info("User created", phone_number=phone_number, user_id=user_id)
@@ -121,17 +118,20 @@ class DatabaseService:
         url: str,
         video_title: str,
         file_size_mb: float,
-        status: str = "completed"
+        status: str = "completed",
     ) -> int:
         """Record a download in the database."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO downloads (user_id, url, video_title, file_size_mb, status)
                 VALUES (?, ?, ?, ?, ?)
-            """, (user_id, url, video_title, file_size_mb, status))
+            """,
+                (user_id, url, video_title, file_size_mb, status),
+            )
 
             conn.commit()
             download_id = cursor.lastrowid
@@ -142,16 +142,11 @@ class DatabaseService:
                 download_id=download_id,
                 user_id=user_id,
                 title=video_title,
-                size_mb=file_size_mb
+                size_mb=file_size_mb,
             )
             return download_id
         except Exception as e:
-            logger.error(
-                "Error recording download",
-                user_id=user_id,
-                url=url,
-                error=str(e)
-            )
+            logger.error("Error recording download", user_id=user_id, url=url, error=str(e))
             raise
 
     def get_user_downloads(self, user_id: int, limit: int = 10) -> List[Download]:
@@ -160,13 +155,16 @@ class DatabaseService:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT id, user_id, url, video_title, file_size_mb, status, created_at, deleted_at
                 FROM downloads
                 WHERE user_id = ?
                 ORDER BY created_at DESC
                 LIMIT ?
-            """, (user_id, limit))
+            """,
+                (user_id, limit),
+            )
 
             rows = cursor.fetchall()
             conn.close()
@@ -180,7 +178,7 @@ class DatabaseService:
                     file_size_mb=row[4],
                     status=row[5],
                     created_at=datetime.fromisoformat(row[6]) if row[6] else datetime.now(),
-                    deleted_at=datetime.fromisoformat(row[7]) if row[7] else None
+                    deleted_at=datetime.fromisoformat(row[7]) if row[7] else None,
                 )
                 for row in rows
             ]
@@ -194,73 +192,71 @@ class DatabaseService:
     def save_download(self, phone_number: str, url: str, file_path: str) -> None:
         """Save a download record for a phone number."""
         import os
-        
+
         try:
             # Get or create user
             user_id = self.get_or_create_user(phone_number)
-            
+
             # Extract video title from file path
             video_title = os.path.basename(file_path)
-            
+
             # Get file size
             file_size_mb = 0.0
             if os.path.exists(file_path):
                 file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
-            
+
             # Record the download
             self.record_download(
                 user_id=user_id,
                 url=url,
                 video_title=video_title,
                 file_size_mb=file_size_mb,
-                status="completed"
+                status="completed",
             )
-            
+
             logger.info(
                 "Download saved",
                 phone_number=phone_number,
                 url=url,
-                file_size_mb=round(file_size_mb, 2)
+                file_size_mb=round(file_size_mb, 2),
             )
         except Exception as e:
-            logger.error(
-                "Error saving download",
-                phone_number=phone_number,
-                url=url,
-                error=str(e)
-            )
+            logger.error("Error saving download", phone_number=phone_number, url=url, error=str(e))
 
-    def update_download_url(self, phone_number: str, original_url: str, cloudinary_url: str) -> None:
+    def update_download_url(
+        self, phone_number: str, original_url: str, cloudinary_url: str
+    ) -> None:
         """Update a download record with the Cloudinary URL (stored as notes)."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
             # Find the download by user phone and original URL
-            cursor.execute("""
+            cursor.execute(
+                """
                 SELECT d.id FROM downloads d
                 JOIN users u ON d.user_id = u.id
                 WHERE u.phone_number = ? AND d.url = ?
                 ORDER BY d.created_at DESC
                 LIMIT 1
-            """, (phone_number, original_url))
+            """,
+                (phone_number, original_url),
+            )
 
             result = cursor.fetchone()
             if result:
                 download_id = result[0]
                 logger.debug(
-                    "Download URL updated",
-                    download_id=download_id,
-                    cloudinary_url=cloudinary_url
+                    "Download URL updated", download_id=download_id, cloudinary_url=cloudinary_url
                 )
-            
+
             conn.close()
         except Exception as e:
             logger.error(
                 "Error updating download URL",
                 phone_number=phone_number,
                 original_url=original_url,
-                error=str(e)
+                error=str(e),
             )
 
     def get_download_stats(self) -> dict:
@@ -286,7 +282,7 @@ class DatabaseService:
             stats = {
                 "total_downloads": total_downloads,
                 "total_users": total_users,
-                "total_size_mb": round(total_size_mb, 2)
+                "total_size_mb": round(total_size_mb, 2),
             }
 
             logger.debug("Retrieved download stats", stats=stats)

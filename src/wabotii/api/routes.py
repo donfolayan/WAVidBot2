@@ -2,25 +2,24 @@
 
 import os
 import time
-import asyncio
 from typing import Dict
-from fastapi import APIRouter, Request, Response, HTTPException, Depends
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 
 from ..config.settings import Settings, get_settings
-from ..services.waha import WAHAService
-from ..services.video import download_video
 from ..services.cloud import CloudinaryService
 from ..services.database import DatabaseService
-from ..utils.logging import get_logger
+from ..services.video import download_video
+from ..services.waha import WAHAService
 from ..utils.helpers import setup_cookies
+from ..utils.logging import get_logger
 from .schemas import (
+    HealthResponse,
+    StatsResponse,
     TestDownloadRequest,
     TestDownloadResponse,
     WebhookResponse,
-    ErrorResponse,
-    HealthResponse,
-    StatsResponse,
 )
 
 logger = get_logger(__name__)
@@ -39,10 +38,7 @@ def cleanup_message_cache() -> None:
     """Clean old entries from message cache."""
     global message_cache
     current_time = time.time()
-    message_cache = {
-        k: v for k, v in message_cache.items()
-        if current_time - v < MESSAGE_CACHE_TTL
-    }
+    message_cache = {k: v for k, v in message_cache.items() if current_time - v < MESSAGE_CACHE_TTL}
 
 
 async def handle_waha_message(
@@ -50,13 +46,13 @@ async def handle_waha_message(
     waha_service: WAHAService,
     db_service: DatabaseService,
     cloud_service: CloudinaryService,
-    settings: Settings
+    settings: Settings,
 ) -> None:
     """Handle incoming message from WAHA webhook (WAHA format)."""
     try:
         from_number = payload.get("from")
         message_text = payload.get("body", "")
-        
+
         # Skip if no text body
         if not message_text or not from_number:
             logger.info("Skipping message - no body or from")
@@ -85,21 +81,22 @@ Examples:
         logger.info("Processing URL", url=url)
 
         # Validate URL
-        is_valid = any([
-            url.startswith("https://www.youtube.com"),
-            url.startswith("https://youtube.com"),
-            url.startswith("https://youtu.be"),
-            url.startswith("https://www.facebook.com"),
-            url.startswith("https://facebook.com"),
-            url.startswith("https://fb.watch"),
-            "facebook.com/share" in url
-        ])
+        is_valid = any(
+            [
+                url.startswith("https://www.youtube.com"),
+                url.startswith("https://youtube.com"),
+                url.startswith("https://youtu.be"),
+                url.startswith("https://www.facebook.com"),
+                url.startswith("https://facebook.com"),
+                url.startswith("https://fb.watch"),
+                "facebook.com/share" in url,
+            ]
+        )
 
         if not is_valid:
             logger.warning("Invalid URL format", url=url)
             await waha_service.send_text_message(
-                from_number,
-                "❌ Please send a valid YouTube or Facebook video URL"
+                from_number, "❌ Please send a valid YouTube or Facebook video URL"
             )
             return
 
@@ -107,11 +104,7 @@ Examples:
         await waha_service.send_text_message(from_number, "📥 Downloading video...")
 
         # Download video
-        download_result = await download_video(
-            url,
-            youtube_cookies_path,
-            facebook_cookies_path
-        )
+        download_result = await download_video(url, youtube_cookies_path, facebook_cookies_path)
 
         if not download_result.local_path or download_result.error:
             logger.error("Download failed", url=url, error=download_result.error)
@@ -120,7 +113,7 @@ Examples:
                 msg = "❌ Facebook security checkpoint detected. This video requires authentication.\n\nPlease try:\n• Making sure the video is public\n• Using a direct video link\n• Checking if the video is still available"
             else:
                 msg = f"❌ Could not download video: {error_msg}"
-            
+
             await waha_service.send_text_message(from_number, msg)
             return
 
@@ -133,40 +126,39 @@ Examples:
 
         # Try sending via WhatsApp directly first, fall back to Cloudinary if it fails
         logger.info("Attempting to send video via WhatsApp")
-        success = await waha_service.send_video_message(
-            from_number,
-            download_result.local_path
-        )
-        
+        success = await waha_service.send_video_message(from_number, download_result.local_path)
+
         if success:
             await waha_service.send_text_message(
-                from_number,
-                f"✅ {download_result.title}\n\nVideo sent successfully!"
+                from_number, f"✅ {download_result.title}\n\nVideo sent successfully!"
             )
         else:
             # Fallback to Cloudinary if direct sending fails
             logger.info("Direct sending failed, falling back to Cloudinary upload")
             await waha_service.send_text_message(from_number, "📤 Uploading to cloud...")
-            
-            upload_url, public_id = await cloud_service.async_upload_to_cloudinary(download_result.local_path)
-            
+
+            upload_url, public_id = await cloud_service.async_upload_to_cloudinary(
+                download_result.local_path
+            )
+
             if upload_url:
                 await waha_service.send_text_message(
                     from_number,
-                    f"✅ {download_result.title}\n\n🎬 Watch here: {upload_url}\n\nLink expires in {settings.cloudinary_retention_hours} hours."
+                    f"✅ {download_result.title}\n\n🎬 Watch here: {upload_url}\n\nLink expires in {settings.cloudinary_retention_hours} hours.",
                 )
                 db_service.update_download_url(from_number, url, upload_url)
             else:
-                await waha_service.send_text_message(from_number, "❌ Failed to upload video. Please try again.")
+                await waha_service.send_text_message(
+                    from_number, "❌ Failed to upload video. Please try again."
+                )
 
     except Exception as e:
         logger.error("Error handling WAHA message", error=str(e))
         try:
             await waha_service.send_text_message(
-                payload.get("from", ""),
-                f"❌ An error occurred: {str(e)}"
+                payload.get("from", ""), f"❌ An error occurred: {str(e)}"
             )
-        except:
+        except Exception:  # noqa: E722
             pass
 
 
@@ -175,7 +167,7 @@ async def handle_message_update(
     waha_service: WAHAService,
     db_service: DatabaseService,
     cloud_service: CloudinaryService,
-    settings: Settings
+    settings: Settings,
 ) -> None:
     """Handle incoming message from WAHA webhook."""
     try:
@@ -208,21 +200,22 @@ Examples:
                 logger.info("Processing URL", url=url)
 
                 # Validate URL
-                is_valid = any([
-                    url.startswith("https://www.youtube.com"),
-                    url.startswith("https://youtube.com"),
-                    url.startswith("https://youtu.be"),
-                    url.startswith("https://www.facebook.com"),
-                    url.startswith("https://facebook.com"),
-                    url.startswith("https://fb.watch"),
-                    "facebook.com/share" in url
-                ])
+                is_valid = any(
+                    [
+                        url.startswith("https://www.youtube.com"),
+                        url.startswith("https://youtube.com"),
+                        url.startswith("https://youtu.be"),
+                        url.startswith("https://www.facebook.com"),
+                        url.startswith("https://facebook.com"),
+                        url.startswith("https://fb.watch"),
+                        "facebook.com/share" in url,
+                    ]
+                )
 
                 if not is_valid:
                     logger.warning("Invalid URL format", url=url)
                     await waha_service.send_text_message(
-                        from_number,
-                        "❌ Please send a valid YouTube or Facebook video URL"
+                        from_number, "❌ Please send a valid YouTube or Facebook video URL"
                     )
                     return
 
@@ -231,9 +224,7 @@ Examples:
 
                 # Download video
                 download_result = await download_video(
-                    url,
-                    youtube_cookies_path,
-                    facebook_cookies_path
+                    url, youtube_cookies_path, facebook_cookies_path
                 )
 
                 if not download_result.local_path or download_result.error:
@@ -253,10 +244,7 @@ Examples:
                 try:
                     user_id = db_service.get_or_create_user(from_number)
                     db_service.record_download(
-                        user_id,
-                        url,
-                        download_result.title or "Unknown",
-                        file_size
+                        user_id, url, download_result.title or "Unknown", file_size
                     )
                 except Exception as e:
                     logger.error("Error recording download", error=str(e))
@@ -269,27 +257,25 @@ Examples:
                     logger.info("Video is small, attempting direct send", size_mb=file_size)
                     await waha_service.send_text_message(
                         from_number,
-                        "🎥 Here's your video! Uploading to Cloudinary for a shareable link..."
+                        "🎥 Here's your video! Uploading to Cloudinary for a shareable link...",
                     )
 
                     # Try to send video
                     try:
                         success = await waha_service.send_video_message(
-                            from_number,
-                            download_result.local_path
+                            from_number, download_result.local_path
                         )
                         if success:
                             video_sent_to_chat = True
                             logger.info("Video sent successfully to chat")
                             await waha_service.send_text_message(
-                                from_number,
-                                "✅ Video sent successfully to chat!"
+                                from_number, "✅ Video sent successfully to chat!"
                             )
                     except Exception as e:
                         logger.error("Error sending video", error=str(e))
                         await waha_service.send_text_message(
                             from_number,
-                            f"⚠️ Could not send video directly ({file_size:.2f} MB). Uploading to Cloudinary..."
+                            f"⚠️ Could not send video directly ({file_size:.2f} MB). Uploading to Cloudinary...",
                         )
 
                     # Upload to Cloudinary
@@ -301,10 +287,12 @@ Examples:
                     except Exception as e:
                         logger.error("Cloudinary upload failed", error=str(e))
                 else:
-                    logger.info("Video is too large, uploading to Cloudinary only", size_mb=file_size)
+                    logger.info(
+                        "Video is too large, uploading to Cloudinary only", size_mb=file_size
+                    )
                     await waha_service.send_text_message(
                         from_number,
-                        f"📤 Video is {file_size:.2f} MB - uploading to Cloudinary for a shareable link..."
+                        f"📤 Video is {file_size:.2f} MB - uploading to Cloudinary for a shareable link...",
                     )
 
                     try:
@@ -328,13 +316,11 @@ Examples:
                 else:
                     if video_sent_to_chat:
                         await waha_service.send_text_message(
-                            from_number,
-                            "✅ Video sent to chat! (Cloudinary upload failed)"
+                            from_number, "✅ Video sent to chat! (Cloudinary upload failed)"
                         )
                     else:
                         await waha_service.send_text_message(
-                            from_number,
-                            "❌ Error: Could not upload to Cloudinary."
+                            from_number, "❌ Error: Could not upload to Cloudinary."
                         )
 
                 # Clean up local file
@@ -353,7 +339,7 @@ Examples:
     response_model=Dict[str, str],
     summary="Health Check",
     description="Simple health check endpoint to verify the API is running.",
-    tags=["Health"]
+    tags=["Health"],
 )
 async def root() -> Dict[str, str]:
     """Health check endpoint."""
@@ -361,10 +347,7 @@ async def root() -> Dict[str, str]:
 
 
 @router.get(
-    "/health",
-    response_model=HealthResponse,
-    summary="Detailed Health Status",
-    tags=["Health"]
+    "/health", response_model=HealthResponse, summary="Detailed Health Status", tags=["Health"]
 )
 async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     """Get detailed health status."""
@@ -375,17 +358,12 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
         await waha_service.close()
 
     return HealthResponse(
-        status="healthy" if waha_healthy else "degraded",
-        version="0.1.0",
-        waha_healthy=waha_healthy
+        status="healthy" if waha_healthy else "degraded", version="0.1.0", waha_healthy=waha_healthy
     )
 
 
 @router.get(
-    "/stats",
-    response_model=StatsResponse,
-    summary="Download Statistics",
-    tags=["Statistics"]
+    "/stats", response_model=StatsResponse, summary="Download Statistics", tags=["Statistics"]
 )
 async def stats(settings: Settings = Depends(get_settings)) -> StatsResponse:
     """Get download statistics."""
@@ -398,12 +376,9 @@ async def stats(settings: Settings = Depends(get_settings)) -> StatsResponse:
     "/webhook",
     summary="WhatsApp Webhook Verification",
     description="Handles webhook verification from WAHA.",
-    tags=["WhatsApp Webhook"]
+    tags=["WhatsApp Webhook"],
 )
-async def verify_webhook(
-    request: Request,
-    settings: Settings = Depends(get_settings)
-) -> Response:
+async def verify_webhook(request: Request, settings: Settings = Depends(get_settings)) -> Response:
     """Handle webhook verification from WAHA."""
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token")
@@ -427,11 +402,10 @@ async def verify_webhook(
     response_model=WebhookResponse,
     summary="Receive WhatsApp Messages",
     description="Receives incoming webhooks from WAHA containing messages.",
-    tags=["WhatsApp Webhook"]
+    tags=["WhatsApp Webhook"],
 )
 async def receive_webhook(
-    request: Request,
-    settings: Settings = Depends(get_settings)
+    request: Request, settings: Settings = Depends(get_settings)
 ) -> WebhookResponse:
     """Handle incoming webhooks from WAHA."""
     try:
@@ -459,23 +433,27 @@ async def receive_webhook(
             if "event" in body and body["event"] == "message" and "payload" in body:
                 payload = body["payload"]
                 message_id = payload.get("id")
-                
+
                 # Check for duplicate messages
                 if message_id:
                     if message_id in message_cache:
                         last_processed = message_cache[message_id]
                         if time.time() - last_processed < MESSAGE_CACHE_TTL:
-                            logger.info("Duplicate message detected, skipping", message_id=message_id)
+                            logger.info(
+                                "Duplicate message detected, skipping", message_id=message_id
+                            )
                             return WebhookResponse(status="ok")
-                    
+
                     # Update cache
                     message_cache[message_id] = time.time()
                     cleanup_message_cache()
-                
+
                 # Handle WAHA message
                 logger.info("Received WAHA message")
-                await handle_waha_message(payload, waha_service, db_service, cloud_service, settings)
-                
+                await handle_waha_message(
+                    payload, waha_service, db_service, cloud_service, settings
+                )
+
             # Also keep support for old format if needed
             elif "data" in body:
                 value = body["data"]
@@ -492,7 +470,9 @@ async def receive_webhook(
                         if message_id in message_cache:
                             last_processed = message_cache[message_id]
                             if time.time() - last_processed < MESSAGE_CACHE_TTL:
-                                logger.info("Duplicate message detected, skipping", message_id=message_id)
+                                logger.info(
+                                    "Duplicate message detected, skipping", message_id=message_id
+                                )
                                 return WebhookResponse(status="ok")
 
                         # Update cache
@@ -502,7 +482,9 @@ async def receive_webhook(
                         cleanup_message_cache()
 
                     # Handle the message
-                    await handle_message_update(value, waha_service, db_service, cloud_service, settings)
+                    await handle_message_update(
+                        value, waha_service, db_service, cloud_service, settings
+                    )
 
                 elif "statuses" in value:
                     logger.info("Received status update")
@@ -519,11 +501,7 @@ async def receive_webhook(
         return WebhookResponse(status="error", message=str(e))
 
 
-@router.get(
-    "/privacy",
-    summary="Privacy Policy",
-    tags=["Legal"]
-)
+@router.get("/privacy", summary="Privacy Policy", tags=["Legal"])
 async def privacy_policy() -> HTMLResponse:
     """Serve Privacy Policy."""
     try:
@@ -534,11 +512,7 @@ async def privacy_policy() -> HTMLResponse:
         raise HTTPException(status_code=404, detail="Privacy Policy not found")
 
 
-@router.get(
-    "/terms",
-    summary="Terms and Conditions",
-    tags=["Legal"]
-)
+@router.get("/terms", summary="Terms and Conditions", tags=["Legal"])
 async def terms_of_service() -> HTMLResponse:
     """Serve Terms and Conditions."""
     try:
@@ -555,11 +529,10 @@ async def terms_of_service() -> HTMLResponse:
     response_model=TestDownloadResponse,
     summary="Test Video Download",
     description="Development endpoint for testing video downloads.",
-    tags=["Development"]
+    tags=["Development"],
 )
 async def test_download(
-    request: TestDownloadRequest,
-    settings: Settings = Depends(get_settings)
+    request: TestDownloadRequest, settings: Settings = Depends(get_settings)
 ) -> TestDownloadResponse:
     """Test video download functionality."""
     if not settings.dev_mode:
@@ -575,7 +548,7 @@ async def test_download(
             file_size_mb=result.file_size_mb,
             title=result.title,
             duration=result.duration,
-            error=result.error
+            error=result.error,
         )
     except Exception as e:
         logger.error("Download test failed", error=str(e))

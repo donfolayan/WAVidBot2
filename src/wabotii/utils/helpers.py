@@ -1,14 +1,13 @@
 """Helper utilities."""
 
+import base64
 import os
 import re
-import base64
+import tempfile
 from datetime import datetime
 from typing import Optional
-import http.cookiejar
 
 from .logging import get_logger
-import tempfile
 
 logger = get_logger(__name__)
 
@@ -50,7 +49,9 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             except Exception:
                 pass
             youtube_path = tf.name
-            logger.info("YouTube cookies file created successfully (base64 decoded)", path=youtube_path)
+            logger.info(
+                "YouTube cookies file created successfully (base64 decoded)", path=youtube_path
+            )
         except Exception as e:
             logger.error("Error creating YouTube cookies file", error=str(e))
 
@@ -59,7 +60,9 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             decoded = base64.b64decode(facebook_cookies_content)
             if not decoded.startswith(b"# Netscape HTTP Cookie File"):
                 logger.warning("Decoded Facebook cookies file does not start with Netscape header")
-            tf = tempfile.NamedTemporaryFile(delete=False, prefix="facebook_cookies_", suffix=".txt")
+            tf = tempfile.NamedTemporaryFile(
+                delete=False, prefix="facebook_cookies_", suffix=".txt"
+            )
             tf.write(decoded)
             tf.close()
             try:
@@ -67,7 +70,9 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             except Exception:
                 pass
             facebook_path = tf.name
-            logger.info("Facebook cookies file created successfully (base64 decoded)", path=facebook_path)
+            logger.info(
+                "Facebook cookies file created successfully (base64 decoded)", path=facebook_path
+            )
         except Exception as e:
             logger.error("Error creating Facebook cookies file", error=str(e))
 

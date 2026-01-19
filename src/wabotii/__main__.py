@@ -1,19 +1,19 @@
 """Main application entry point."""
 
-import os
 import asyncio
+import os
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
 
-from .config.settings import Settings, get_settings
 from .api.routes import router
+from .config.settings import get_settings
 from .services.cloud import CloudinaryService
 from .services.database import DatabaseService
-from .utils.logging import setup_logging, get_logger
+from .utils.logging import get_logger, setup_logging
 
 # Load environment variables
 load_dotenv()
@@ -50,12 +50,12 @@ async def lifespan(app: FastAPI):
         version="0.1.0",
         dev_mode=settings.dev_mode,
         base_url=settings.base_url,
-        waha_url=settings.waha_base_url
+        waha_url=settings.waha_base_url,
     )
 
     # Initialize database
     try:
-        db_service = DatabaseService(settings)
+        DatabaseService(settings)
         logger.info("Database initialized")
     except Exception as e:
         logger.error("Failed to initialize database", error=str(e))

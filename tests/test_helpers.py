@@ -1,7 +1,7 @@
 """Tests for utilities."""
 
 import os
-import tempfile
+
 from src.wabotii.utils.helpers import sanitize_filename, setup_cookies
 
 

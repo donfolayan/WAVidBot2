@@ -1,19 +1,19 @@
 """Video download service using yt-dlp."""
 
-import os
 import asyncio
-import yt_dlp
-import requests
 import http.cookiejar
+import os
 import random
-from dataclasses import dataclass
-from typing import Optional
-from datetime import datetime
-
-from ..utils.logging import get_logger
-from ..utils.helpers import sanitize_filename
-import tempfile
 import shutil
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+import requests
+import yt_dlp
+
+from ..utils.helpers import sanitize_filename
+from ..utils.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -35,7 +35,7 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     ]
 
     user_agent = random.choice(user_agents)
@@ -50,7 +50,7 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         "Sec-Fetch-Dest": "document",
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-Site": "none",
-        "Cache-Control": "max-age=0"
+        "Cache-Control": "max-age=0",
     }
 
     cookies = None
@@ -69,24 +69,26 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         logger.debug("Waiting before Facebook request", seconds=await_time)
         # Can't use await here, so just use time.sleep
         import time
+
         time.sleep(await_time)
 
         response = requests.get(
-            url,
-            headers=headers,
-            cookies=cookies,
-            allow_redirects=True,
-            timeout=15
+            url, headers=headers, cookies=cookies, allow_redirects=True, timeout=15
         )
         final_url = response.url
 
         # Check for security checkpoints
-        if any(keyword in str(final_url).lower() for keyword in ["checkpoint", "login", "security"]):
+        if any(
+            keyword in str(final_url).lower() for keyword in ["checkpoint", "login", "security"]
+        ):
             error_msg = f"Facebook security checkpoint detected: {final_url}"
             logger.error("Facebook checkpoint detected", url=final_url)
             raise Exception(error_msg)
 
-        if any(keyword in response.text.lower() for keyword in ["robot", "bot", "security check", "checkpoint"]):
+        if any(
+            keyword in response.text.lower()
+            for keyword in ["robot", "bot", "security check", "checkpoint"]
+        ):
             logger.error("Facebook security challenge detected")
             raise Exception("Facebook security challenge detected")
 
@@ -118,7 +120,11 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
                         try:
                             shutil.copy2(downloaded_path, new_path)
                             os.remove(downloaded_path)
-                            logger.info("Copied and removed file", from_path=downloaded_path, to_path=new_path)
+                            logger.info(
+                                "Copied and removed file",
+                                from_path=downloaded_path,
+                                to_path=new_path,
+                            )
                         except Exception:
                             new_path = downloaded_path
 
@@ -128,7 +134,7 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
                     if file_size_mb == 0:
                         try:
                             os.remove(new_path)
-                        except:
+                        except OSError:  # noqa: E722
                             pass
                         raise Exception("The downloaded file is empty")
 
@@ -137,7 +143,7 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
                         "Video downloaded successfully",
                         path=new_path,
                         size_mb=file_size_mb,
-                        duration=duration
+                        duration=duration,
                     )
                     return {
                         "local_path": new_path,
@@ -145,7 +151,7 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
                         "title": title,
                         "duration": duration,
                     }
-    except Exception as e:
+    except Exception:
         # Propagate exception to caller where it will be handled
         raise
 
@@ -153,7 +159,7 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
 async def download_video(
     url: str,
     youtube_cookies_path: Optional[str] = None,
-    facebook_cookies_path: Optional[str] = None
+    facebook_cookies_path: Optional[str] = None,
 ) -> VideoDownloadResult:
     """Download video from YouTube or Facebook using yt-dlp."""
     logger.info("Starting video download", url=url)
@@ -179,11 +185,7 @@ async def download_video(
             logger.info("Resolved share URL", resolved_url=url)
         except Exception as e:
             logger.error("Failed to resolve Facebook share URL", error=str(e))
-            return VideoDownloadResult(
-                local_path=None,
-                file_size_mb=None,
-                error=str(e)
-            )
+            return VideoDownloadResult(local_path=None, file_size_mb=None, error=str(e))
 
     # Configure yt-dlp options
     ydl_opts = {
@@ -219,8 +221,4 @@ async def download_video(
         else:
             error_msg = str(e)
         logger.error("yt-dlp download error", error=error_msg)
-        return VideoDownloadResult(
-            local_path=None,
-            file_size_mb=None,
-            error=error_msg
-        )
+        return VideoDownloadResult(local_path=None, file_size_mb=None, error=error_msg)
