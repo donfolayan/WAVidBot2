@@ -166,13 +166,27 @@ jobs:
             
             # Navigate to app directory or clone if doesn't exist
             cd /home/ubuntu
-            if [ ! -d "wabotii" ]; then
-              git clone https://github.com/${{ github.repository }} wabotii
+            
+            # Make sure directory exists
+            mkdir -p /home/ubuntu/wabotii
+            cd /home/ubuntu/wabotii
+            
+            # Initialize git if not already a repo
+            if [ ! -d ".git" ]; then
+              git init
+              git remote add origin https://github.com/${{ github.repository }}.git
             fi
-            cd wabotii
             
             # Pull latest changes
-            git pull origin main
+            git fetch origin main
+            git checkout -f origin/main
+            
+            # Verify docker-compose.yml exists
+            if [ ! -f "docker-compose.yml" ]; then
+              echo "❌ docker-compose.yml not found!"
+              ls -la
+              exit 1
+            fi
             
             # Stop existing containers
             docker-compose down || true
