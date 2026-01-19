@@ -1,9 +1,7 @@
 services:
   # WABotII FastAPI application
   wabotii:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:latest
     env_file:
       - .env
     container_name: wabotii
