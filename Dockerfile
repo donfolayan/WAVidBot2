@@ -37,9 +37,9 @@ ENV PYTHONUNBUFFERED=1
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD python -c "import httpx; httpx.get('http://localhost:8000/health', timeout=5)"
+# Health check - verify app is listening
+HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+    CMD nc -z localhost 8000 || exit 1
 
 # Run application with uv run (automatically uses the venv)
 CMD ["uv", "run", "gunicorn", "src.wabotii.__main__:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
