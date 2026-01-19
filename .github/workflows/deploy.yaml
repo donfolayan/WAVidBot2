@@ -78,6 +78,10 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Destroy old instance (if exists)
+        run: terraform destroy -target=oci_core_instance.wabotii_instance -auto-approve || true
+        working-directory: ./infra
+
       - name: Terraform Plan
         run: terraform plan -out=tfplan
 
