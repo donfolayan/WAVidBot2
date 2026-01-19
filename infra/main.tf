@@ -162,6 +162,10 @@ resource "oci_core_instance" "wabotii_instance" {
   }
 
   preserve_boot_volume = false
+
+  lifecycle {
+    create_before_destroy = false
+  }
 }
 
 # Public IP is assigned directly to the instance via VNIC
