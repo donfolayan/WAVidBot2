@@ -167,7 +167,7 @@ jobs:
             git pull origin main
             
             # Stop existing containers
-            docker-compose down || true
+            docker compose down || true
             
             # Create environment file from secret
             cat > .env << 'EOF'
@@ -179,16 +179,16 @@ jobs:
             echo "DOCKERHUB_REPO=${{ secrets.DOCKERHUB_REPO }}" >> .env
             
             # Pull latest images
-            docker-compose pull
+            docker compose pull
             
             # Start services in detached mode
-            docker-compose up -d
+            docker compose up -d
             
             # Wait for services to be ready
             sleep 10
             
             # Check status
-            docker-compose ps
+            docker compose ps
             
             # Health check
             curl -f http://localhost:8000/health || echo "⚠️  Health check failed - services may still be starting"
