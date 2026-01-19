@@ -156,6 +156,14 @@ jobs:
           key: ${{ secrets.ORACLE_VM_SSH_KEY }}
           command_timeout: 30m
           script: |
+            # Wait for cloud-init to complete
+            echo "Waiting for cloud-init to complete..."
+            sudo cloud-init status --wait
+            
+            # Verify Docker and docker-compose are available
+            docker --version
+            docker-compose --version
+            
             # Navigate to app directory or clone if doesn't exist
             cd /home/ubuntu
             if [ ! -d "wabotii" ]; then
@@ -181,16 +189,29 @@ jobs:
             # Pull latest images
             docker-compose pull
             
-            # Start services in detached mode
-            docker-compose up -d
-            
-            # Wait for services to be ready
-            sleep 10
+            # Start services and wait for them to be ready
+            echo "Starting containers..."
+            docker-compose up -d --wait --wait-timeout 300
             
             # Check status
             docker-compose ps
             
-            # Health check
-            curl -f http://localhost:8000/health || echo "⚠️  Health check failed - services may still be starting"
+            # Verify containers are running
+            if [ $(docker-compose ps -q | wc -l) -eq 0 ]; then
+              echo "❌ No containers running, checking logs..."
+              docker-compose logs --tail=50
+              exit 1
+            fi
+            
+            # Health check with retries
+            for i in {1..5}; do
+              if curl -f http://localhost:8000/health; then
+                echo "✅ Health check passed!"
+                break
+              fi
+              echo "Health check attempt $i/5 failed, waiting 10s..."
+              sleep 10
+            done
             
             echo "✅ Deployment complete!"
+            docker-compose ps
