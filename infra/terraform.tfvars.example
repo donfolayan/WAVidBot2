@@ -1,0 +1,35 @@
+# OCI Authentication - Get these from your OCI Console
+tenancy_ocid     = "ocid1.tenancy.oc1..aaaaaaaXXXXXXXXXXXX"
+user_ocid        = "ocid1.user.oc1..aaaaaaaXXXXXXXXXXXX"
+fingerprint      = "aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "us-ashburn-1"
+
+# Deployment Configuration
+compartment_id      = "ocid1.compartment.oc1..aaaaaaaXXXXXXXXXXXX"
+availability_domain = "aBCD:US-ASHBURN-AD-1"
+
+# Instance Configuration - VM.Standard.E2.1.Micro is Always Free eligible
+instance_shape     = "VM.Standard.E2.1.Micro"
+instance_ocpus     = 1
+instance_memory_gb = 1
+
+# OS Image - Ubuntu 22.04 (get OCID from OCI Console)
+# Navigate to: Compute > Images > Choose your region
+image_id = "ocid1.image.oc1.iad.aaaaaaaXXXXXXXXXXXX"
+
+# Application Configuration
+github_repo = "https://github.com/yourusername/WABotII.git"
+base_url    = "" # Leave empty to use the public IP
+
+# WAHA Configuration
+waha_api_key              = "your-secure-api-key-here"
+waha_dashboard_username   = "admin"
+waha_dashboard_password   = "your-secure-password"
+whatsapp_swagger_username = "admin"
+whatsapp_swagger_password = "your-secure-password"
+
+# Cloudinary Configuration
+cloudinary_cloud_name = "your-cloud-name"
+cloudinary_api_key    = "your-api-key"
+cloudinary_api_secret = "your-api-secret"

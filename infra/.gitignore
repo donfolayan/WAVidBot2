@@ -1,0 +1,20 @@
+# Terraform files
+*.tfstate.backup
+*.tfvars
+!*.tfvars.example
+.terraform/
+
+# SSH keys
+wabotii-ssh-key.pem
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -53,3 +53,10 @@ facebook_cookies.txt
 
 # Pre-commit
 .pre-commit/
+
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
