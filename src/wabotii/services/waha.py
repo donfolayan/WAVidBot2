@@ -32,9 +32,12 @@ class WAHAService:
         headers = {}
         if self.api_key:
             headers["X-Api-Key"] = self.api_key
+            logger.info("WAHA API key loaded", key_length=len(self.api_key))
+        else:
+            logger.warning("WAHA API key is empty!")
 
         self.client = httpx.AsyncClient(base_url=self.base_url, headers=headers, timeout=30.0)
-        logger.info("WAHA service initialized", base_url=self.base_url)
+        logger.info("WAHA service initialized", base_url=self.base_url, headers=headers)
 
     async def close(self) -> None:
         """Close the HTTP client."""
