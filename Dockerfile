@@ -37,9 +37,9 @@ ENV PYTHONUNBUFFERED=1
 # Expose port
 EXPOSE 8000
 
-# Health check - verify app is listening
+# Health check - verify app is responding
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD nc -z localhost 8000 || exit 1
+    CMD curl -f http://localhost:8000/health || exit 1
 
 # Run application with uv run (automatically uses the venv)
 CMD ["uv", "run", "gunicorn", "src.wabotii.__main__:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
