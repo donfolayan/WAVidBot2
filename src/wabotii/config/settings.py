@@ -57,6 +57,7 @@ class Settings(BaseSettings):
         case_sensitive=False,
         populate_by_name=True,
         extra="ignore",
+        env_prefix="",
     )
 
     def get_cloudinary_url(self) -> str | None:
@@ -86,4 +87,9 @@ class Settings(BaseSettings):
 
 def get_settings() -> Settings:
     """Get application settings."""
-    return Settings()  # type: ignore
+    settings = Settings()  # type: ignore
+    # Debug log to see what's loaded
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Settings loaded - WAHA_BASE_URL: {settings.waha_base_url}, WAHA_API_KEY length: {len(settings.waha_api_key)}")
+    return settings
