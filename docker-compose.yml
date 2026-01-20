@@ -50,6 +50,7 @@ services:
       - "3000:8000"
     environment:
       - WAHA_ENGINES=${WAHA_ENGINES}
+      - WHATSAPP_DEFAULT_ENGINE=${WHATSAPP_DEFAULT_ENGINE}
       - LOG_LEVEL=debug
       # Tell WAHA where to send incoming message webhooks (FastAPI service)
       - WAHA_CALLBACK_URL=http://wabotii:8000/webhook
