@@ -81,10 +81,6 @@ class WAHAService:
     async def send_text_message(self, phone_number: str, text: str) -> bool:
         """Send a text message via WAHA."""
         try:
-            # Ensure phone number is in correct format (with country code)
-            if not phone_number.endswith("@c.us"):
-                phone_number = f"{phone_number}@c.us"
-
             response = await self.client.post(
                 "/api/sendText",
                 json={"chatId": phone_number, "text": text, "session": self.session_name},
@@ -110,10 +106,6 @@ class WAHAService:
         import os
 
         try:
-            # Ensure phone number is in correct format
-            if not phone_number.endswith("@c.us"):
-                phone_number = f"{phone_number}@c.us"
-
             # Read and encode video file as base64
             with open(video_path, "rb") as f:
                 video_data = base64.b64encode(f.read()).decode("utf-8")
