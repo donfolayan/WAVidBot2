@@ -1,47 +1,47 @@
 #cloud-config
 # Cloud-init configuration for WABotII instance
 # Infrastructure setup only - application deployment via GitHub Actions
-
-package_update: true
-
-packages:
-  - curl
-  - git
-  - docker.io
-  - wget
-  - htop
-
-write_files:
-  - path: /etc/docker/daemon.json
-    permissions: '0644'
-    content: |
-      {
-        "log-driver": "json-file",
-        "log-opts": {
-          "max-size": "10m",
-          "max-file": "3"
-        }
-      }
-
-runcmd:
-  - systemctl start docker
-  - systemctl enable docker
-  - usermod -aG docker ubuntu
-  - mkdir -p /home/ubuntu/wabotii/downloads /home/ubuntu/wabotii/data /home/ubuntu/wabotii/waha-data
-  - chown -R ubuntu:ubuntu /home/ubuntu/wabotii
-  - curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
-  - chmod +x /usr/local/bin/docker-compose
-  - ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
-  # Open app ports and persist firewall rules
-  - iptables -I INPUT 5 -p tcp --dport 3000 -j ACCEPT
-  - iptables -I INPUT 5 -p tcp --dport 8000 -j ACCEPT
-  - apt-get update && apt-get install -y iptables-persistent
-  - netfilter-persistent save
-  - systemctl restart docker
-
-timezone: UTC
-
-final_message: |
-  WABotII infrastructure is ready!
-  Docker is installed and configured.
-  Deploy application via GitHub Actions workflow.
+#
+# package_update: true
+#
+# packages:
+#   - curl
+#   - git
+#   - docker.io
+#   - wget
+#   - htop
+#
+# write_files:
+#   - path: /etc/docker/daemon.json
+#     permissions: '0644'
+#     content: |
+#       {
+#         "log-driver": "json-file",
+#         "log-opts": {
+#           "max-size": "10m",
+#           "max-file": "3"
+#         }
+#       }
+#
+# runcmd:
+#   - systemctl start docker
+#   - systemctl enable docker
+#   - usermod -aG docker ubuntu
+#   - mkdir -p /home/ubuntu/wabotii/downloads /home/ubuntu/wabotii/data /home/ubuntu/wabotii/waha-data
+#   - chown -R ubuntu:ubuntu /home/ubuntu/wabotii
+#   - curl -SL https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-x86_64 -o /usr/local/bin/docker-compose
+#   - chmod +x /usr/local/bin/docker-compose
+#   - ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+#   # Open app ports and persist firewall rules
+#   - iptables -I INPUT 5 -p tcp --dport 3000 -j ACCEPT
+#   - iptables -I INPUT 5 -p tcp --dport 8000 -j ACCEPT
+#   - apt-get update && apt-get install -y iptables-persistent
+#   - netfilter-persistent save
+#   - systemctl restart docker
+#
+# timezone: UTC
+#
+# final_message: |
+#   WABotII infrastructure is ready!
+#   Docker is installed and configured.
+#   Deploy application via GitHub Actions workflow.
