@@ -49,8 +49,7 @@ services:
       # WAHA listens on 8000 in this image; map host 3000 to container 8000
       - "3000:8000"
     environment:
-      # Use WEBJS engine for browser-based (more reliable) or NOWEB for protocol-based (faster)
-      - WAHA_ENGINES=WEBJS
+      - WAHA_ENGINES=${WAHA_ENGINES}
       - LOG_LEVEL=debug
       # Tell WAHA where to send incoming message webhooks (FastAPI service)
       - WAHA_CALLBACK_URL=http://wabotii:8000/webhook
