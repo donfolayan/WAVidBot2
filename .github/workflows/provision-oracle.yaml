@@ -1,0 +1,66 @@
+name: Provision Oracle ARM Instance
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'  # Every 5 minutes
+  workflow_dispatch:        # Allow manual trigger
+
+jobs:
+  provision:
+    name: Try to create ARM instance
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install OCI CLI
+        run: |
+          curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh | bash -s -- --accept-all-defaults
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Configure OCI CLI
+        run: |
+          mkdir -p ~/.oci
+          cat > ~/.oci/config << EOF
+          [DEFAULT]
+          user=${{ secrets.OCI_USER_OCID }}
+          fingerprint=${{ secrets.OCI_FINGERPRINT }}
+          key_file=~/.oci/oci_api_key.pem
+          tenancy=${{ secrets.OCI_TENANCY_OCID }}
+          region=${{ secrets.OCI_REGION }}
+          EOF
+          echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+
+      - name: Create metadata file
+        run: |
+          cat > metadata.json << 'EOF'
+          {
+            "ssh_authorized_keys": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxeOhB7gP5biZ7xXPSQGrVdCAeZNQjRTHoClbQgjPAB donfolayan@gmail.com\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnjhpRwSA4Xr/JjPzspohjVFK5llfg32/4oiYy2J3tk oracle-waha"
+          }
+          EOF
+
+      - name: Attempt to create instance
+        run: |
+          ~/bin/oci compute instance launch \
+            --availability-domain "uMxE:AF-JOHANNESBURG-1-AD-1" \
+            --compartment-id "ocid1.tenancy.oc1..aaaaaaaap2lw6ehhztvxwgcecglcpaw7wxiluorq7j2xs3uupe6ywbvdfw2a" \
+            --shape "VM.Standard.A1.Flex" \
+            --shape-config '{"memoryInGBs": 6, "ocpus": 1}' \
+            --subnet-id "ocid1.subnet.oc1.af-johannesburg-1.aaaaaaaal6dm4pcgey3hobknyebsi4y2ylqfjcs5hqv36ghmvbzwz5bx34qa" \
+            --image-id "ocid1.image.oc1.af-johannesburg-1.aaaaaaaahqmbhyldeypb367h46pbtsbyfk3mnbovrjr5q2eiq2bvtchnhxfq" \
+            --display-name "Waha" \
+            --assign-public-ip true \
+            --metadata file://metadata.json \
+            --availability-config '{"recoveryAction": "RESTORE_INSTANCE"}' \
+            --instance-options '{"areLegacyImdsEndpointsDisabled": false}'
+
+      - name: Disable this workflow on success
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.disableWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'provision-oracle.yaml'
+            });
+            console.log('✅ Instance created! Workflow disabled.');
