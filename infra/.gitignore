@@ -4,6 +4,7 @@
 *.tfvars
 !*.tfvars.example
 .terraform/
+tfplan
 
 # SSH keys
 wabotii-ssh-key.pem
