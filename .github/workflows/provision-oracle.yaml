@@ -22,18 +22,14 @@ jobs:
       - name: Configure OCI CLI
         run: |
           mkdir -p ~/.oci
-          cat > ~/.oci/config << EOF
-[DEFAULT]
-user=${{ secrets.OCI_USER_OCID }}
-fingerprint=${{ secrets.OCI_FINGERPRINT }}
-key_file=/home/runner/.oci/oci_api_key.pem
-tenancy=${{ secrets.OCI_TENANCY_OCID }}
-region=${{ secrets.OCI_REGION }}
-EOF
-          echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/oci_api_key.pem
+          printf '[DEFAULT]\nuser=%s\nfingerprint=%s\nkey_file=/home/runner/.oci/oci_api_key.pem\ntenancy=%s\nregion=%s\n' \
+            '${{ secrets.OCI_USER_OCID }}' \
+            '${{ secrets.OCI_FINGERPRINT }}' \
+            '${{ secrets.OCI_TENANCY_OCID }}' \
+            '${{ secrets.OCI_REGION }}' > ~/.oci/config
+          echo '${{ secrets.OCI_API_KEY }}' > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/config
-          export OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING=True
 
       - name: Create metadata file
         run: |
