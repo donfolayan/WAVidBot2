@@ -60,3 +60,4 @@ facebook_cookies.txt
 !*.tfvars.example
 .terraform/
 .terraform.lock.hcl
+.claude
