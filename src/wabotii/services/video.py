@@ -7,7 +7,7 @@ import random
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 import requests
 import yt_dlp
@@ -58,7 +58,7 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         cj = http.cookiejar.MozillaCookieJar()
         try:
             cj.load(cookies_path, ignore_discard=True, ignore_expires=True)
-            cookies = {c.name: c.value for c in cj}
+            cookies = {c.name: c.value for c in cj if c.value is not None}
             logger.info("Loaded Facebook cookies", count=len(cookies))
         except Exception as e:
             logger.warning("Could not load cookies", cookies_path=cookies_path, error=str(e))
@@ -98,15 +98,17 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         raise
 
 
-def _download_sync(url: str, ydl_opts: dict) -> dict:
+def _download_sync(url: str, ydl_opts: dict[str, Any]) -> dict[str, Any]:
     """Synchronous helper to run yt-dlp and return basic metadata."""
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
             info = ydl.extract_info(url, download=True)
 
             if info:
                 downloaded_path = ydl.prepare_filename(info)
                 title = info.get("title", "video")
+                if not title:
+                    title = f"video_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 sanitized_title = sanitize_filename(title)
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 new_filename = f"original_{sanitized_title}_{timestamp}.mp4"
@@ -151,6 +153,8 @@ def _download_sync(url: str, ydl_opts: dict) -> dict:
                         "title": title,
                         "duration": duration,
                     }
+
+            raise Exception("Download failed: no video info or file not found")
     except Exception:
         # Propagate exception to caller where it will be handled
         raise
