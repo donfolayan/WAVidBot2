@@ -1,10 +1,10 @@
-# Local development: runs both WAHA and the bot together.
-# For production, deploy WAHA separately (see docker-compose.waha.yml)
-# and point WAHA_BASE_URL to the remote WAHA instance.
+# Production: both WAHA and the bot on the same server.
+# Bot image is pulled from Docker Hub (set DOCKERHUB_USERNAME and DOCKERHUB_REPO in .env).
+# For local dev, override with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 
 services:
   wabotii:
-    build: .
+    image: ${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:latest
     container_name: wabotii
     env_file:
       - .env
