@@ -20,23 +20,21 @@ jobs:
         run: |
           mkdir -p ~/.oci
           cat > ~/.oci/config << EOF
-          [DEFAULT]
-          user=${{ secrets.OCI_USER_OCID }}
-          fingerprint=${{ secrets.OCI_FINGERPRINT }}
-          key_file=~/.oci/oci_api_key.pem
-          tenancy=${{ secrets.OCI_TENANCY_OCID }}
-          region=${{ secrets.OCI_REGION }}
-          EOF
+[DEFAULT]
+user=${{ secrets.OCI_USER_OCID }}
+fingerprint=${{ secrets.OCI_FINGERPRINT }}
+key_file=/home/runner/.oci/oci_api_key.pem
+tenancy=${{ secrets.OCI_TENANCY_OCID }}
+region=${{ secrets.OCI_REGION }}
+EOF
           echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
 
       - name: Create metadata file
         run: |
           cat > metadata.json << 'EOF'
-          {
-            "ssh_authorized_keys": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxeOhB7gP5biZ7xXPSQGrVdCAeZNQjRTHoClbQgjPAB donfolayan@gmail.com\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnjhpRwSA4Xr/JjPzspohjVFK5llfg32/4oiYy2J3tk oracle-waha"
-          }
-          EOF
+{"ssh_authorized_keys": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGxeOhB7gP5biZ7xXPSQGrVdCAeZNQjRTHoClbQgjPAB donfolayan@gmail.com\nssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFnjhpRwSA4Xr/JjPzspohjVFK5llfg32/4oiYy2J3tk oracle-waha"}
+EOF
 
       - name: Attempt to create instance
         run: |
