@@ -30,7 +30,7 @@ classifiers = [
 
 dependencies = [
     "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
+    "uvicorn>=0.27.0",
     "pydantic-settings>=2.1.0",
     "pydantic>=2.5.3",
     "python-dotenv>=1.0.0",
@@ -39,18 +39,16 @@ dependencies = [
     "yt-dlp>=2024.1.0",
     "cloudinary>=1.36.0",
     "gunicorn>=21.2.0",
-    "sqlalchemy>=2.0.23",
     "structlog>=24.1.0",
-    "pytest>=7.4.3",
-    "pytest-asyncio>=0.23.2",
-    "ruff>=0.2.0",
-    "mypy>=1.8.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.23.2",
+    "ruff>=0.2.0",
+    "mypy>=1.8.0",
     "black==23.12.1",
-    "mypy==1.8.0",
     "pre-commit==3.6.0",
 ]
 

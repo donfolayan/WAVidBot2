@@ -3,8 +3,7 @@ FROM python:3.12-slim-bullseye
 
 # Install system dependencies including ffmpeg
 RUN apt-get update && \
-    apt-get upgrade -y && \
-    apt-get install -y ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -24,11 +23,8 @@ RUN uv sync --no-dev
 # Add virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy application code
-COPY . .
-
-# Create downloads directory
-RUN mkdir -p downloads
+# Copy remaining application files (legal pages, etc.)
+COPY legal ./legal
 
 # Set environment variable for ffmpeg
 ENV FFMPEG_PATH=ffmpeg
@@ -42,4 +38,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run application with uv run (automatically uses the venv)
-CMD ["uv", "run", "gunicorn", "src.wabotii.__main__:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "4", "--timeout", "120"]
+CMD ["uv", "run", "gunicorn", "src.wabotii.__main__:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120"]

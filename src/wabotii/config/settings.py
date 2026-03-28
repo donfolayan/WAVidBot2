@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     cloudinary_api_secret: str = Field(default="", alias="CLOUDINARY_API_SECRET")
 
     # Video Processing
-    file_retention_hours: int = Field(default=24, alias="FILE_RETENTION_HOURS")
+    file_retention_hours: int = Field(default=1, alias="FILE_RETENTION_HOURS")
     cloudinary_retention_hours: int = Field(default=24, alias="CLOUDINARY_RETENTION_HOURS")
     max_file_size_mb: int = Field(default=16, alias="MAX_FILE_SIZE_MB")
     download_timeout_seconds: int = Field(default=300, alias="DOWNLOAD_TIMEOUT_SECONDS")

@@ -34,6 +34,16 @@ MESSAGE_CACHE_TTL = 60
 youtube_cookies_path, facebook_cookies_path = setup_cookies()
 
 
+def _cleanup_local_file(file_path: str | None) -> None:
+    """Remove a local file if it exists."""
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+            logger.info("Cleaned up local file", path=file_path)
+        except Exception as e:
+            logger.error("Error cleaning up local file", path=file_path, error=str(e))
+
+
 def cleanup_message_cache() -> None:
     """Clean old entries from message cache."""
     global message_cache
@@ -126,31 +136,37 @@ Examples:
 
         # Try sending via WhatsApp directly first, fall back to Cloudinary if it fails
         logger.info("Attempting to send video via WhatsApp")
-        success = await waha_service.send_video_message(from_number, download_result.local_path)
-
-        if success:
-            await waha_service.send_text_message(
-                from_number, f"✅ {download_result.title}\n\nVideo sent successfully!"
-            )
-        else:
-            # Fallback to Cloudinary if direct sending fails
-            logger.info("Direct sending failed, falling back to Cloudinary upload")
-            await waha_service.send_text_message(from_number, "📤 Uploading to cloud...")
-
-            upload_url, public_id = await cloud_service.async_upload_to_cloudinary(
-                download_result.local_path
+        try:
+            success = await waha_service.send_video_message(
+                from_number, download_result.local_path
             )
 
-            if upload_url:
+            if success:
                 await waha_service.send_text_message(
-                    from_number,
-                    f"✅ {download_result.title}\n\n🎬 Watch here: {upload_url}\n\nLink expires in {settings.cloudinary_retention_hours} hours.",
+                    from_number, f"✅ {download_result.title}\n\nVideo sent successfully!"
                 )
-                db_service.update_download_url(from_number, url, upload_url)
             else:
-                await waha_service.send_text_message(
-                    from_number, "❌ Failed to upload video. Please try again."
+                # Fallback to Cloudinary if direct sending fails
+                logger.info("Direct sending failed, falling back to Cloudinary upload")
+                await waha_service.send_text_message(from_number, "📤 Uploading to cloud...")
+
+                upload_url, public_id = await cloud_service.async_upload_to_cloudinary(
+                    download_result.local_path
                 )
+
+                if upload_url:
+                    await waha_service.send_text_message(
+                        from_number,
+                        f"✅ {download_result.title}\n\n🎬 Watch here: {upload_url}\n\nLink expires in {settings.cloudinary_retention_hours} hours.",
+                    )
+                    db_service.update_download_url(from_number, url, upload_url)
+                else:
+                    await waha_service.send_text_message(
+                        from_number, "❌ Failed to upload video. Please try again."
+                    )
+        finally:
+            # Always clean up local file after processing
+            _cleanup_local_file(download_result.local_path)
 
     except Exception as e:
         logger.error("Error handling WAHA message", error=str(e))
@@ -249,86 +265,81 @@ Examples:
                 except Exception as e:
                     logger.error("Error recording download", error=str(e))
 
-                # Attempt to send video directly if small enough
-                cloudinary_url = None
-                video_sent_to_chat = False
+                try:
+                    # Attempt to send video directly if small enough
+                    cloudinary_url = None
+                    video_sent_to_chat = False
 
-                if file_size < settings.max_file_size_mb:
-                    logger.info("Video is small, attempting direct send", size_mb=file_size)
-                    await waha_service.send_text_message(
-                        from_number,
-                        "🎥 Here's your video! Uploading to Cloudinary for a shareable link...",
-                    )
-
-                    # Try to send video
-                    try:
-                        success = await waha_service.send_video_message(
-                            from_number, download_result.local_path
-                        )
-                        if success:
-                            video_sent_to_chat = True
-                            logger.info("Video sent successfully to chat")
-                            await waha_service.send_text_message(
-                                from_number, "✅ Video sent successfully to chat!"
-                            )
-                    except Exception as e:
-                        logger.error("Error sending video", error=str(e))
+                    if file_size < settings.max_file_size_mb:
+                        logger.info("Video is small, attempting direct send", size_mb=file_size)
                         await waha_service.send_text_message(
                             from_number,
-                            f"⚠️ Could not send video directly ({file_size:.2f} MB). Uploading to Cloudinary...",
+                            "🎥 Here's your video! Uploading to Cloudinary for a shareable link...",
                         )
 
-                    # Upload to Cloudinary
-                    try:
-                        cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
-                            download_result.local_path
-                        )
-                        logger.info("Cloudinary upload complete", url=cloudinary_url)
-                    except Exception as e:
-                        logger.error("Cloudinary upload failed", error=str(e))
-                else:
-                    logger.info(
-                        "Video is too large, uploading to Cloudinary only", size_mb=file_size
-                    )
-                    await waha_service.send_text_message(
-                        from_number,
-                        f"📤 Video is {file_size:.2f} MB - uploading to Cloudinary for a shareable link...",
-                    )
+                        # Try to send video
+                        try:
+                            success = await waha_service.send_video_message(
+                                from_number, download_result.local_path
+                            )
+                            if success:
+                                video_sent_to_chat = True
+                                logger.info("Video sent successfully to chat")
+                                await waha_service.send_text_message(
+                                    from_number, "✅ Video sent successfully to chat!"
+                                )
+                        except Exception as e:
+                            logger.error("Error sending video", error=str(e))
+                            await waha_service.send_text_message(
+                                from_number,
+                                f"⚠️ Could not send video directly ({file_size:.2f} MB). Uploading to Cloudinary...",
+                            )
 
-                    try:
-                        cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
-                            download_result.local_path
-                        )
-                        logger.info("Cloudinary upload complete", url=cloudinary_url)
-                        # Delete local file after upload
-                        os.remove(download_result.local_path)
-                    except Exception as e:
-                        logger.error("Cloudinary upload failed", error=str(e))
-                        cloudinary_url = None
-
-                # Send Cloudinary link if available
-                if cloudinary_url:
-                    if video_sent_to_chat:
-                        message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}"
+                        # Upload to Cloudinary
+                        try:
+                            cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
+                                download_result.local_path
+                            )
+                            logger.info("Cloudinary upload complete", url=cloudinary_url)
+                        except Exception as e:
+                            logger.error("Cloudinary upload failed", error=str(e))
                     else:
-                        message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}\n\nNote: Video was too large to send directly in chat."
-                    await waha_service.send_text_message(from_number, message)
-                else:
-                    if video_sent_to_chat:
-                        await waha_service.send_text_message(
-                            from_number, "✅ Video sent to chat! (Cloudinary upload failed)"
+                        logger.info(
+                            "Video is too large, uploading to Cloudinary only", size_mb=file_size
                         )
-                    else:
                         await waha_service.send_text_message(
-                            from_number, "❌ Error: Could not upload to Cloudinary."
+                            from_number,
+                            f"📤 Video is {file_size:.2f} MB - uploading to Cloudinary for a shareable link...",
                         )
 
-                # Clean up local file
-                try:
-                    if not video_sent_to_chat and os.path.exists(download_result.local_path):
-                        os.remove(download_result.local_path)
-                except Exception as e:
-                    logger.error("Error deleting local file", error=str(e))
+                        try:
+                            cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
+                                download_result.local_path
+                            )
+                            logger.info("Cloudinary upload complete", url=cloudinary_url)
+                        except Exception as e:
+                            logger.error("Cloudinary upload failed", error=str(e))
+                            cloudinary_url = None
+
+                    # Send Cloudinary link if available
+                    if cloudinary_url:
+                        if video_sent_to_chat:
+                            message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}"
+                        else:
+                            message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}\n\nNote: Video was too large to send directly in chat."
+                        await waha_service.send_text_message(from_number, message)
+                    else:
+                        if video_sent_to_chat:
+                            await waha_service.send_text_message(
+                                from_number, "✅ Video sent to chat! (Cloudinary upload failed)"
+                            )
+                        else:
+                            await waha_service.send_text_message(
+                                from_number, "❌ Error: Could not upload to Cloudinary."
+                            )
+                finally:
+                    # Always clean up local file after processing
+                    _cleanup_local_file(download_result.local_path)
 
     except Exception as e:
         logger.error("Error in message update handler", error=str(e))

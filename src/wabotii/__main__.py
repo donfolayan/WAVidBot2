@@ -26,8 +26,26 @@ setup_logging(log_level=settings.log_level, dev_mode=settings.dev_mode)
 logger = get_logger(__name__)
 
 
+def cleanup_local_files(retention_hours: int) -> int:
+    """Delete local files in downloads/ older than retention_hours. Returns count deleted."""
+    import glob
+    import time
+
+    cutoff = time.time() - (retention_hours * 3600)
+    deleted = 0
+    for filepath in glob.glob("downloads/*"):
+        try:
+            if os.path.getmtime(filepath) < cutoff:
+                os.remove(filepath)
+                logger.info("Deleted old local file", path=filepath)
+                deleted += 1
+        except Exception as e:
+            logger.error("Error deleting local file", path=filepath, error=str(e))
+    return deleted
+
+
 async def cleanup_old_files() -> None:
-    """Cleanup old files periodically."""
+    """Cleanup old local files and Cloudinary files periodically."""
     logger.info("Starting cleanup task")
     cloud_service = CloudinaryService(settings)
 
@@ -35,6 +53,12 @@ async def cleanup_old_files() -> None:
         try:
             await asyncio.sleep(3600)  # Run every hour
             logger.info("Running periodic cleanup")
+
+            # Clean local files
+            deleted = cleanup_local_files(settings.file_retention_hours)
+            logger.info("Local file cleanup complete", deleted_count=deleted)
+
+            # Clean Cloudinary files
             cloud_service.cleanup_cloudinary_files()
         except Exception as e:
             logger.error("Error in cleanup task", error=str(e))
