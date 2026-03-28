@@ -193,11 +193,17 @@ async def download_video(
 
     # Configure yt-dlp options
     ydl_opts = {
-        "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+        "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio/best",
         "outtmpl": "downloads/original_%(id)s.%(ext)s",
         "quiet": False,
         "no_warnings": False,
         "merge_output_format": "mp4",
+        "postprocessors": [
+            {
+                "key": "FFmpegVideoRemuxer",
+                "preferedformat": "mp4",
+            },
+        ],
         "verbose": False,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.70 Safari/537.36",
     }
