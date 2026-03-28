@@ -9,6 +9,9 @@ jobs:
   provision:
     name: Try to create ARM instance
     runs-on: ubuntu-latest
+    env:
+      OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING: "True"
+      SUPPRESS_LABEL_WARNING: "True"
 
     steps:
       - name: Install OCI CLI
@@ -29,6 +32,8 @@ region=${{ secrets.OCI_REGION }}
 EOF
           echo "${{ secrets.OCI_API_KEY }}" > ~/.oci/oci_api_key.pem
           chmod 600 ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/config
+          export OCI_CLI_SUPPRESS_FILE_PERMISSIONS_WARNING=True
 
       - name: Create metadata file
         run: |
