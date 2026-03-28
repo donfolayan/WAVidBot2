@@ -53,6 +53,15 @@ jobs:
             --availability-config '{"recoveryAction": "RESTORE_INSTANCE"}' \
             --instance-options '{"areLegacyImdsEndpointsDisabled": false}'
 
+      - name: Notify success
+        if: success()
+        run: |
+          curl -s -X POST "https://ntfy.sh/wabotii-oracle-dc5232" \
+            -H "Title: Oracle ARM Instance Created" \
+            -H "Priority: high" \
+            -H "Tags: white_check_mark" \
+            -d "Your VM.Standard.A1.Flex instance is ready! Log in and set up WAHA."
+
       - name: Disable this workflow on success
         if: success()
         uses: actions/github-script@v7
