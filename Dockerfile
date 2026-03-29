@@ -26,6 +26,9 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy remaining application files (legal pages, etc.)
 COPY legal ./legal
 
+# Create downloads directory (required for StaticFiles mount at startup)
+RUN mkdir -p downloads
+
 # Set environment variable for ffmpeg
 ENV FFMPEG_PATH=ffmpeg
 ENV PYTHONUNBUFFERED=1
