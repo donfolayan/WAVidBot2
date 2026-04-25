@@ -1,9 +1,11 @@
 # Use official Python runtime as parent image
 FROM python:3.12-slim-bookworm
 
-# Install system dependencies including ffmpeg
+# Install system dependencies including ffmpeg and Deno for yt-dlp's YouTube JS challenges.
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ca-certificates curl ffmpeg unzip && \
+    DENO_INSTALL=/usr/local curl -fsSL https://deno.land/install.sh | sh && \
+    apt-get purge -y --auto-remove curl unzip && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
