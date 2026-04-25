@@ -193,7 +193,7 @@ async def download_video(
     work_dir = tempfile.mkdtemp(prefix="wabotii_download_", dir="downloads")
 
     ydl_opts = {
-        "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio/best",
+        "format": "bestvideo*+bestaudio/best",
         "outtmpl": os.path.join(work_dir, "original_%(id)s.%(ext)s"),
         "quiet": False,
         "no_warnings": False,
