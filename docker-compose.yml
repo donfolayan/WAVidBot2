@@ -1,7 +1,7 @@
 services:
   # WABotII FastAPI application
   wabotii:
-    image: ${DOCKERHUB_USERNAME}/${DOCKERHUB_REPO}:latest
+    build: .
     env_file:
       - .env
     container_name: wabotii
@@ -32,7 +32,7 @@ services:
     networks:
       - wabotii-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/live', timeout=3).read()"]
       interval: 30s
       timeout: 10s
       retries: 3
