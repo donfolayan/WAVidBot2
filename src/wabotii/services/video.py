@@ -5,6 +5,7 @@ import http.cookiejar
 import os
 import random
 import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Optional
@@ -98,7 +99,7 @@ def resolve_facebook_share(url: str, cookies_path: Optional[str] = None) -> str:
         raise
 
 
-def _download_sync(url: str, ydl_opts: dict[str, Any]) -> dict[str, Any]:
+def _download_sync(url: str, ydl_opts: dict[str, Any], work_dir: str) -> dict[str, Any]:
     """Synchronous helper to run yt-dlp and return basic metadata."""
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[arg-type]
@@ -106,6 +107,14 @@ def _download_sync(url: str, ydl_opts: dict[str, Any]) -> dict[str, Any]:
 
             if info:
                 downloaded_path = ydl.prepare_filename(info)
+                if not os.path.exists(downloaded_path):
+                    requested_downloads = info.get("requested_downloads") or []
+                    for download in requested_downloads:
+                        filepath = download.get("filepath")
+                        if filepath and os.path.exists(filepath):
+                            downloaded_path = filepath
+                            break
+
                 title = info.get("title", "video")
                 if not title:
                     title = f"video_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -116,28 +125,16 @@ def _download_sync(url: str, ydl_opts: dict[str, Any]) -> dict[str, Any]:
 
                 if downloaded_path != new_path:
                     try:
-                        os.rename(downloaded_path, new_path)
+                        shutil.move(downloaded_path, new_path)
                         logger.info("Renamed downloaded file", old=downloaded_path, new=new_path)
-                    except Exception:
-                        try:
-                            shutil.copy2(downloaded_path, new_path)
-                            os.remove(downloaded_path)
-                            logger.info(
-                                "Copied and removed file",
-                                from_path=downloaded_path,
-                                to_path=new_path,
-                            )
-                        except Exception:
-                            new_path = downloaded_path
+                    except Exception as e:
+                        raise Exception(f"Could not move downloaded file: {e}") from e
 
                 if os.path.exists(new_path):
                     file_size_mb = os.path.getsize(new_path) / (1024 * 1024)
 
                     if file_size_mb == 0:
-                        try:
-                            os.remove(new_path)
-                        except OSError:  # noqa: E722
-                            pass
+                        os.remove(new_path)
                         raise Exception("The downloaded file is empty")
 
                     duration = info.get("duration")
@@ -156,6 +153,7 @@ def _download_sync(url: str, ydl_opts: dict[str, Any]) -> dict[str, Any]:
 
             raise Exception("Download failed: no video info or file not found")
     except Exception:
+        shutil.rmtree(work_dir, ignore_errors=True)
         # Propagate exception to caller where it will be handled
         raise
 
@@ -192,9 +190,11 @@ async def download_video(
             return VideoDownloadResult(local_path=None, file_size_mb=None, error=str(e))
 
     # Configure yt-dlp options
+    work_dir = tempfile.mkdtemp(prefix="wabotii_download_", dir="downloads")
+
     ydl_opts = {
         "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio/best",
-        "outtmpl": "downloads/original_%(id)s.%(ext)s",
+        "outtmpl": os.path.join(work_dir, "original_%(id)s.%(ext)s"),
         "quiet": False,
         "no_warnings": False,
         "merge_output_format": "mp4",
@@ -213,7 +213,8 @@ async def download_video(
 
     try:
         # Run the blocking yt-dlp download in a thread to avoid blocking the event loop
-        result = await asyncio.to_thread(_download_sync, url, ydl_opts)
+        result = await asyncio.to_thread(_download_sync, url, ydl_opts, work_dir)
+        shutil.rmtree(work_dir, ignore_errors=True)
         return VideoDownloadResult(
             local_path=result.get("local_path"),
             file_size_mb=result.get("file_size_mb"),
@@ -221,6 +222,7 @@ async def download_video(
             duration=result.get("duration"),
         )
     except Exception as e:
+        shutil.rmtree(work_dir, ignore_errors=True)
         error_str = str(e).lower()
         if "requested format not available" in error_str:
             error_msg = "Video format not available - might be private or deleted"
