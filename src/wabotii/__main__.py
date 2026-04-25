@@ -48,18 +48,23 @@ async def cleanup_old_files() -> None:
     """Cleanup old local files and Cloudinary files periodically."""
     logger.info("Starting cleanup task")
     cloud_service = CloudinaryService(settings)
+    db_service = DatabaseService(settings)
 
     while True:
         try:
-            await asyncio.sleep(3600)  # Run every hour
+            cleanup_interval_hours = max(1, settings.cloudinary_cleanup_interval_hours)
+            await asyncio.sleep(cleanup_interval_hours * 3600)
             logger.info("Running periodic cleanup")
 
-            # Clean local files
             deleted = cleanup_local_files(settings.file_retention_hours)
             logger.info("Local file cleanup complete", deleted_count=deleted)
 
-            # Clean Cloudinary files
-            cloud_service.cleanup_cloudinary_files()
+            public_ids = db_service.get_expired_cloudinary_public_ids(
+                settings.cloudinary_retention_hours
+            )
+            deleted_public_ids = cloud_service.cleanup_cloudinary_public_ids(public_ids)
+            for public_id in deleted_public_ids:
+                db_service.mark_cloudinary_deleted(public_id)
         except Exception as e:
             logger.error("Error in cleanup task", error=str(e))
 

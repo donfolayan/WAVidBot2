@@ -76,10 +76,27 @@ class CloudinaryService:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(executor, self.upload_to_cloudinary, file_path, folder)
 
+    def cleanup_cloudinary_public_ids(self, public_ids: list[str]) -> list[str]:
+        """Delete known Cloudinary files and return the IDs deleted."""
+        if not self.settings.get_cloudinary_url():
+            logger.warning("Cloudinary not configured, skipping cleanup")
+            return []
+
+        deleted_public_ids = []
+        for public_id in public_ids:
+            if not public_id:
+                continue
+            try:
+                cloudinary.uploader.destroy(public_id, resource_type="video")
+                deleted_public_ids.append(public_id)
+            except Exception as e:
+                logger.error("Error deleting Cloudinary file", public_id=public_id, error=str(e))
+        return deleted_public_ids
+
     def cleanup_cloudinary_files(
         self, folder: str = "wa-downloads", retention_hours: Optional[int] = None
     ) -> None:
-        """Delete Cloudinary files older than retention_hours."""
+        """Delete Cloudinary files older than retention_hours by listing the remote folder."""
         if retention_hours is None:
             retention_hours = self.settings.cloudinary_retention_hours
 

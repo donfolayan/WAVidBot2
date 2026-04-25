@@ -73,11 +73,15 @@ class DatabaseService:
                     video_title TEXT,
                     file_size_mb REAL,
                     status TEXT DEFAULT 'completed',
+                    cloudinary_url TEXT,
+                    cloudinary_public_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     deleted_at TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users(id)
                 )
             """)
+            self._ensure_column(cursor, "downloads", "cloudinary_url", "TEXT")
+            self._ensure_column(cursor, "downloads", "cloudinary_public_id", "TEXT")
 
             conn.commit()
             conn.close()
@@ -85,6 +89,15 @@ class DatabaseService:
         except Exception as e:
             logger.error("Error initializing database", error=str(e))
             raise
+
+    def _ensure_column(
+        self, cursor: sqlite3.Cursor, table: str, column: str, definition: str
+    ) -> None:
+        """Add a column when an existing SQLite database predates it."""
+        cursor.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in cursor.fetchall()}
+        if column not in columns:
+            cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def get_or_create_user(self, phone_number: str) -> int:
         """Get or create a user by phone number."""
@@ -97,12 +110,14 @@ class DatabaseService:
             result = cursor.fetchone()
 
             if result:
-                user_id = result[0]
+                user_id = int(result[0])
                 logger.debug("User found", phone_number=phone_number, user_id=user_id)
             else:
                 # Create new user
                 cursor.execute("INSERT INTO users (phone_number) VALUES (?)", (phone_number,))
                 conn.commit()
+                if cursor.lastrowid is None:
+                    raise RuntimeError("Failed to create user")
                 user_id = cursor.lastrowid
                 logger.info("User created", phone_number=phone_number, user_id=user_id)
 
@@ -134,6 +149,8 @@ class DatabaseService:
             )
 
             conn.commit()
+            if cursor.lastrowid is None:
+                raise RuntimeError("Failed to record download")
             download_id = cursor.lastrowid
             conn.close()
 
@@ -224,32 +241,33 @@ class DatabaseService:
             logger.error("Error saving download", phone_number=phone_number, url=url, error=str(e))
 
     def update_download_url(
-        self, phone_number: str, original_url: str, cloudinary_url: str
+        self,
+        phone_number: str,
+        original_url: str,
+        cloudinary_url: str,
+        cloudinary_public_id: str | None = None,
     ) -> None:
-        """Update a download record with the Cloudinary URL (stored as notes)."""
+        """Update a download record with Cloudinary asset details."""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
-            # Find the download by user phone and original URL
             cursor.execute(
                 """
-                SELECT d.id FROM downloads d
-                JOIN users u ON d.user_id = u.id
-                WHERE u.phone_number = ? AND d.url = ?
-                ORDER BY d.created_at DESC
-                LIMIT 1
-            """,
-                (phone_number, original_url),
-            )
-
-            result = cursor.fetchone()
-            if result:
-                download_id = result[0]
-                logger.debug(
-                    "Download URL updated", download_id=download_id, cloudinary_url=cloudinary_url
+                UPDATE downloads
+                SET cloudinary_url = ?, cloudinary_public_id = ?
+                WHERE id = (
+                    SELECT d.id FROM downloads d
+                    JOIN users u ON d.user_id = u.id
+                    WHERE u.phone_number = ? AND d.url = ?
+                    ORDER BY d.created_at DESC
+                    LIMIT 1
                 )
-
+            """,
+                (cloudinary_url, cloudinary_public_id, phone_number, original_url),
+            )
+            conn.commit()
+            logger.debug("Download URL updated", cloudinary_public_id=cloudinary_public_id)
             conn.close()
         except Exception as e:
             logger.error(
@@ -258,6 +276,68 @@ class DatabaseService:
                 original_url=original_url,
                 error=str(e),
             )
+
+    def get_expired_cloudinary_public_ids(self, retention_hours: int) -> list[str]:
+        """Return uploaded Cloudinary asset IDs that are old enough to delete."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT cloudinary_public_id
+                FROM downloads
+                WHERE cloudinary_public_id IS NOT NULL
+                  AND deleted_at IS NULL
+                  AND created_at < datetime('now', ?)
+            """,
+                (f"-{retention_hours} hours",),
+            )
+            public_ids = [row[0] for row in cursor.fetchall()]
+            conn.close()
+            return public_ids
+        except Exception as e:
+            logger.error("Error retrieving expired Cloudinary files", error=str(e))
+            return []
+
+    def mark_cloudinary_deleted(self, public_id: str) -> None:
+        """Mark a Cloudinary-backed download as deleted."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                UPDATE downloads
+                SET deleted_at = CURRENT_TIMESTAMP
+                WHERE cloudinary_public_id = ?
+            """,
+                (public_id,),
+            )
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            logger.error("Error marking Cloudinary file deleted", public_id=public_id, error=str(e))
+
+    def count_user_downloads_since(self, phone_number: str, hours: int) -> int:
+        """Count recent downloads for a sender."""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT COUNT(*)
+                FROM downloads d
+                JOIN users u ON d.user_id = u.id
+                WHERE u.phone_number = ?
+                  AND d.created_at >= datetime('now', ?)
+            """,
+                (phone_number, f"-{hours} hours"),
+            )
+            count = cursor.fetchone()[0]
+            conn.close()
+            return int(count)
+        except Exception as e:
+            logger.error("Error counting recent downloads", phone_number=phone_number, error=str(e))
+            return 0
 
     def get_download_stats(self) -> dict:
         """Get overall download statistics."""
