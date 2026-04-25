@@ -6,12 +6,12 @@ A modern, production-ready WhatsApp video downloader bot built with FastAPI and 
 
 - 🎥 **Download from Multiple Platforms**: YouTube, Facebook, and more via yt-dlp
 - 📱 **WhatsApp Integration**: WAHA-based for reliable, stable connections
-- ☁️ **Cloud Storage**: Automatic Cloudinary integration for videos >16MB
+- ☁️ **Cloud Storage**: Cloudinary fallback for videos that cannot be sent directly
 - 📊 **Download Tracking**: SQLite database for user and download history
 - 📝 **Structured Logging**: JSON-based logging for production monitoring
 - 🔒 **Security**: HTTPS-ready, security headers, input validation
 - 🐳 **Docker Ready**: Docker and docker-compose for easy deployment
-- 🚀 **CI/CD Pipeline**: GitHub Actions with DockerHub and Oracle Cloud deployment
+- 🚀 **Railway Ready**: Dockerfile and Railway health checks included
 - 💾 **Async Processing**: Async/await throughout for high performance
 
 ## Architecture
@@ -74,7 +74,7 @@ Once authenticated:
 1. Family members can send WhatsApp messages with video URLs
 2. Bot automatically downloads and responds with:
    - Direct video (if <16MB)
-   - Cloudinary shareable link (always)
+   - Cloudinary shareable link only when direct sending is not possible
 3. Videos auto-cleanup after 24 hours
 
 ## Configuration
@@ -85,8 +85,11 @@ Once authenticated:
 # Application
 APP_NAME=WABotII
 DEV_MODE=false              # Set to true for Swagger docs + test endpoints
-LOG_LEVEL=INFO              # DEBUG, INFO, WARNING, ERROR
+LOG_LEVEL=ERROR             # Production logs are error-only to reduce noise
 PORT=8000
+WEBHOOK_SECRET=your_secret  # Add this to the WAHA callback URL as ?token=...
+ALLOWED_PHONE_NUMBERS=2348012345678@c.us
+MAX_DAILY_DOWNLOADS=20
 
 # WAHA Service
 WAHA_BASE_URL=http://waha:3000
@@ -103,6 +106,7 @@ CLOUDINARY_API_SECRET=your_secret
 # Storage Settings
 FILE_RETENTION_HOURS=24     # Delete local files after 24 hours
 CLOUDINARY_RETENTION_HOURS=24
+CLOUDINARY_CLEANUP_INTERVAL_HOURS=24
 MAX_FILE_SIZE_MB=16         # Send directly if smaller
 ```
 
@@ -113,7 +117,9 @@ See `.env.example` for all available options.
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/` | GET | Health check |
-| `/health` | GET | Detailed health status + WAHA status |
+| `/live` | GET | Cheap liveness check for Railway/container health |
+| `/health` | GET | Cheap app health status |
+| `/health/waha` | GET | On-demand WAHA health status |
 | `/stats` | GET | Download statistics |
 | `/webhook` | GET | WhatsApp webhook verification |
 | `/webhook` | POST | Receive WhatsApp messages |
@@ -172,7 +178,7 @@ WABotII/
 ├── docker-compose.yml  # Multi-container orchestration
 ├── .env.example        # Environment template
 ├── .pre-commit-config.yaml  # Pre-commit hooks
-└── .github/workflows/deploy.yaml  # CI/CD pipeline
+└── railway.json        # Railway deployment settings
 ```
 
 ### Key Services
@@ -196,42 +202,16 @@ Tracks users and downloads for analytics:
 
 ## Deployment
 
-### Deploy to Oracle Cloud
+### Deploy to Railway
 
-1. **Set GitHub Secrets**:
-   ```
-   DOCKERHUB_USERNAME      # Docker Hub username
-   DOCKERHUB_TOKEN         # Docker Hub access token
-   DOCKERHUB_REPO          # Repository name (e.g., "wabotii")
-   ORACLE_VM_IP            # Oracle VM public IP
-   ORACLE_VM_USERNAME      # SSH username
-   ORACLE_VM_SSH_KEY       # SSH private key
-   ENV_FILE                # Production .env contents
-   ```
-
-2. **Push to main branch**:
-   ```bash
-   git add .
-   git commit -m "Deploy to production"
-   git push origin main
-   ```
-
-3. **GitHub Actions will**:
-   - Run linting and tests
-   - Build Docker image
-   - Push to DockerHub
-   - SSH into Oracle VM
-   - Pull latest image and restart services
-
-### Docker Production
+Railway can deploy this app from the included `Dockerfile`. Set the variables from
+`.env.example` in Railway, then point WAHA's callback to:
 
 ```bash
-# On Oracle VM
-docker login -u $DOCKERHUB_USERNAME -p $DOCKERHUB_TOKEN
-docker pull $DOCKERHUB_USERNAME/$DOCKERHUB_REPO:latest
-echo "$ENV_FILE" > .env
-docker-compose up -d
+https://your-railway-app.up.railway.app/webhook?token=$WEBHOOK_SECRET
 ```
+
+The Railway health check uses `/live`, which does not call WAHA or Cloudinary.
 
 ## WAHA Session Management
 
@@ -291,7 +271,10 @@ docker-compose restart waha
 ### Health check failing
 ```bash
 curl http://localhost:8000/health
-# Should return: {"status": "healthy", "version": "0.1.0", "waha_healthy": true}
+# Should return: {"status": "healthy", "version": "0.1.0", "waha_healthy": null}
+
+curl http://localhost:8000/health/waha
+# Calls WAHA only when you explicitly need that check.
 ```
 
 ## Testing
@@ -331,4 +314,3 @@ For issues and questions:
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - Video downloader
 - [FastAPI](https://fastapi.tiangolo.com/) - Web framework
 - [Cloudinary](https://cloudinary.com/) - Cloud storage
-# Deployment triggered: Mon Jan 19 15:07:09 WAT 2026
