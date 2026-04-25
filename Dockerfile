@@ -1,5 +1,5 @@
 # Use official Python runtime as parent image
-FROM python:3.12-slim-bullseye
+FROM python:3.12-slim-bookworm
 
 # Install system dependencies including ffmpeg
 RUN apt-get update && \
@@ -14,11 +14,11 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 # Copy project metadata files and source code (needed for build)
-COPY pyproject.toml README.md ./
+COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 
-# Install Python dependencies using uv sync
-RUN uv sync --no-dev
+# Install Python dependencies using the committed lockfile
+RUN uv sync --locked --no-dev
 
 # Add virtual environment to PATH
 ENV PATH="/app/.venv/bin:$PATH"
@@ -40,5 +40,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/live', timeout=3).read()" || exit 1
 
-# Run application with uv run (automatically uses the venv)
-CMD ["uv", "run", "gunicorn", "src.wabotii.__main__:app", "-k", "uvicorn.workers.UvicornWorker", "--bind", "0.0.0.0:8000", "--workers", "1", "--timeout", "120"]
+# Run application from the prebuilt virtualenv and bind Railway's dynamic port.
+CMD ["sh", "-c", "gunicorn src.wabotii.__main__:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 120"]
