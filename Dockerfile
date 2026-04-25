@@ -32,13 +32,14 @@ RUN mkdir -p downloads
 # Set environment variable for ffmpeg
 ENV FFMPEG_PATH=ffmpeg
 ENV PYTHONUNBUFFERED=1
+ENV PORT=8080
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8080
 
 # Health check - verify app is responding without cascading to WAHA
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
-    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8000\")}/live', timeout=3).read()" || exit 1
+    CMD python -c "import os, urllib.request; urllib.request.urlopen(f'http://localhost:{os.environ.get(\"PORT\", \"8080\")}/live', timeout=3).read()" || exit 1
 
 # Run application from the prebuilt virtualenv and bind Railway's dynamic port.
-CMD ["sh", "-c", "gunicorn src.wabotii.__main__:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8000} --workers 1 --timeout 120"]
+CMD ["sh", "-c", "gunicorn src.wabotii.__main__:app -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT:-8080} --workers 1 --timeout 120"]
