@@ -45,7 +45,7 @@ class WebhookResponse(BaseModel):
     """Response for webhook processing."""
 
     status: str = Field(..., description="Processing status")
-    message: Optional[str] = Field(None, description="Optional status message")
+    message: Optional[str] = Field(default=None, description="Optional status message")
 
     model_config = {
         "json_schema_extra": {
@@ -77,7 +77,7 @@ class HealthResponse(BaseModel):
 
     status: str = Field(..., description="Service status")
     version: str = Field(..., description="API version")
-    waha_healthy: bool = Field(..., description="WAHA service health status")
+    waha_healthy: Optional[bool] = Field(None, description="WAHA service health status")
 
     model_config = {
         "json_schema_extra": {

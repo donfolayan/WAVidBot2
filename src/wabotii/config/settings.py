@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     port: int = Field(default=8000, alias="PORT")
     base_url: str = Field(default="http://localhost:8000", alias="BASE_URL")
+    webhook_secret: str = Field(default="", alias="WEBHOOK_SECRET")
+    allowed_phone_numbers: str = Field(default="", alias="ALLOWED_PHONE_NUMBERS")
+    max_daily_downloads: int = Field(default=20, alias="MAX_DAILY_DOWNLOADS")
 
     # WAHA Configuration
     waha_base_url: str = Field(default="http://localhost:3000", alias="WAHA_BASE_URL")
@@ -44,6 +47,9 @@ class Settings(BaseSettings):
     # Video Processing
     file_retention_hours: int = Field(default=1, alias="FILE_RETENTION_HOURS")
     cloudinary_retention_hours: int = Field(default=24, alias="CLOUDINARY_RETENTION_HOURS")
+    cloudinary_cleanup_interval_hours: int = Field(
+        default=24, alias="CLOUDINARY_CLEANUP_INTERVAL_HOURS"
+    )
     max_file_size_mb: int = Field(default=16, alias="MAX_FILE_SIZE_MB")
     download_timeout_seconds: int = Field(default=300, alias="DOWNLOAD_TIMEOUT_SECONDS")
 
@@ -75,6 +81,14 @@ class Settings(BaseSettings):
         """Check if running in production mode."""
         return not self.dev_mode
 
+    def allowed_phone_number_set(self) -> set[str]:
+        """Return normalized allowed WhatsApp sender IDs."""
+        return {
+            phone.strip()
+            for phone in self.allowed_phone_numbers.split(",")
+            if phone.strip()
+        }
+
     @classmethod
     def settings_customise_sources(
         cls, settings_cls, init_settings, env_settings, dotenv_settings, file_secret_settings
@@ -88,8 +102,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Get application settings."""
     settings = Settings()  # type: ignore
-    # Debug log to see what's loaded
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"Settings loaded - WAHA_BASE_URL: {settings.waha_base_url}, WAHA_API_KEY length: {len(settings.waha_api_key)}")
     return settings

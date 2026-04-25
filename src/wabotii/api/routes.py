@@ -29,6 +29,7 @@ router = APIRouter()
 # Message cache to prevent duplicate processing
 message_cache: Dict[str, float] = {}
 MESSAGE_CACHE_TTL = 60
+DEFAULT_VERIFY_TOKEN = "wa_downloader_test_token"
 
 # Setup cookies at module load time
 youtube_cookies_path, facebook_cookies_path = setup_cookies()
@@ -51,6 +52,40 @@ def cleanup_message_cache() -> None:
     message_cache = {k: v for k, v in message_cache.items() if current_time - v < MESSAGE_CACHE_TTL}
 
 
+def _request_token(request: Request) -> str:
+    """Read a webhook token from a header, bearer token, or query string."""
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+    return (
+        request.headers.get("x-wabotii-token")
+        or request.headers.get("x-webhook-secret")
+        or request.headers.get("x-api-key")
+        or request.query_params.get("token")
+        or ""
+    ).strip()
+
+
+def _webhook_is_authorized(request: Request, settings: Settings) -> bool:
+    """Require a shared secret for production webhooks."""
+    accepted_tokens = {settings.webhook_secret.strip()}
+    if settings.verify_token != DEFAULT_VERIFY_TOKEN:
+        accepted_tokens.add(settings.verify_token.strip())
+    accepted_tokens = {token for token in accepted_tokens if token}
+
+    if not accepted_tokens:
+        return settings.dev_mode
+    return _request_token(request) in accepted_tokens
+
+
+def _sender_is_allowed(from_number: str, settings: Settings) -> bool:
+    """Restrict downloads to configured WhatsApp senders when present."""
+    allowed_numbers = settings.allowed_phone_number_set()
+    if not allowed_numbers:
+        return True
+    return from_number in allowed_numbers or from_number.split("@", 1)[0] in allowed_numbers
+
+
 async def handle_waha_message(
     payload: dict,
     waha_service: WAHAService,
@@ -63,9 +98,16 @@ async def handle_waha_message(
         from_number = payload.get("from")
         message_text = payload.get("body", "")
 
+        if payload.get("fromMe") or payload.get("isStatus"):
+            return
+
         # Skip if no text body
         if not message_text or not from_number:
             logger.info("Skipping message - no body or from")
+            return
+
+        if not _sender_is_allowed(from_number, settings):
+            logger.warning("Ignoring message from unauthorized sender", from_number=from_number)
             return
 
         logger.info("Processing WAHA message", from_number=from_number, text=message_text)
@@ -110,6 +152,13 @@ Examples:
             )
             return
 
+        if db_service.count_user_downloads_since(from_number, 24) >= settings.max_daily_downloads:
+            logger.warning("Daily download limit reached", from_number=from_number)
+            await waha_service.send_text_message(
+                from_number, "Daily download limit reached. Please try again tomorrow."
+            )
+            return
+
         # Send downloading message
         await waha_service.send_text_message(from_number, "📥 Downloading video...")
 
@@ -134,20 +183,21 @@ Examples:
         # Save to database
         db_service.save_download(from_number, url, download_result.local_path)
 
-        # Try sending via WhatsApp directly first, fall back to Cloudinary if it fails
-        logger.info("Attempting to send video via WhatsApp")
+        # Try sending via WhatsApp directly for small files; upload larger files only.
+        logger.info("Processing downloaded video delivery")
         try:
-            success = await waha_service.send_video_message(
-                from_number, download_result.local_path
-            )
+            success = False
+            if file_size_mb <= settings.max_file_size_mb:
+                success = await waha_service.send_video_message(
+                    from_number, download_result.local_path
+                )
 
             if success:
                 await waha_service.send_text_message(
                     from_number, f"✅ {download_result.title}\n\nVideo sent successfully!"
                 )
             else:
-                # Fallback to Cloudinary if direct sending fails
-                logger.info("Direct sending failed, falling back to Cloudinary upload")
+                logger.info("Uploading video to Cloudinary")
                 await waha_service.send_text_message(from_number, "📤 Uploading to cloud...")
 
                 upload_url, public_id = await cloud_service.async_upload_to_cloudinary(
@@ -159,7 +209,7 @@ Examples:
                         from_number,
                         f"✅ {download_result.title}\n\n🎬 Watch here: {upload_url}\n\nLink expires in {settings.cloudinary_retention_hours} hours.",
                     )
-                    db_service.update_download_url(from_number, url, upload_url)
+                    db_service.update_download_url(from_number, url, upload_url, public_id)
                 else:
                     await waha_service.send_text_message(
                         from_number, "❌ Failed to upload video. Please try again."
@@ -178,173 +228,6 @@ Examples:
             pass
 
 
-async def handle_message_update(
-    value: dict,
-    waha_service: WAHAService,
-    db_service: DatabaseService,
-    cloud_service: CloudinaryService,
-    settings: Settings,
-) -> None:
-    """Handle incoming message from WAHA webhook."""
-    try:
-        messages = value.get("messages", [])
-        for message in messages:
-            if message.get("type") == "text":
-                from_number = message["from"]
-                message_text = message["text"]["body"]
-
-                logger.info("Received text message", from_number=from_number, text=message_text)
-
-                # Check if message contains a URL
-                if "http" not in message_text.lower():
-                    help_message = """👋 Welcome to WABotII - WhatsApp Video Downloader!
-
-Just send me a YouTube or Facebook video URL, and I'll download it for you.
-
-Supported platforms:
-• 📺 YouTube
-• 📘 Facebook
-
-Examples:
-• https://www.youtube.com/watch?v=...
-• https://www.facebook.com/...
-• https://youtu.be/..."""
-                    await waha_service.send_text_message(from_number, help_message)
-                    return
-
-                url = message_text.strip()
-                logger.info("Processing URL", url=url)
-
-                # Validate URL
-                is_valid = any(
-                    [
-                        url.startswith("https://www.youtube.com"),
-                        url.startswith("https://youtube.com"),
-                        url.startswith("https://youtu.be"),
-                        url.startswith("https://www.facebook.com"),
-                        url.startswith("https://facebook.com"),
-                        url.startswith("https://fb.watch"),
-                        "facebook.com/share" in url,
-                    ]
-                )
-
-                if not is_valid:
-                    logger.warning("Invalid URL format", url=url)
-                    await waha_service.send_text_message(
-                        from_number, "❌ Please send a valid YouTube or Facebook video URL"
-                    )
-                    return
-
-                # Send downloading message
-                await waha_service.send_text_message(from_number, "📥 Downloading video...")
-
-                # Download video
-                download_result = await download_video(
-                    url, youtube_cookies_path, facebook_cookies_path
-                )
-
-                if not download_result.local_path or download_result.error:
-                    logger.error("Download failed", url=url, error=download_result.error)
-                    error_msg = download_result.error or "Unknown error"
-                    if "checkpoint" in error_msg.lower():
-                        msg = "❌ Facebook security checkpoint detected. This video requires authentication.\n\nPlease try:\n• Making sure the video is public\n• Using a direct video link\n• Checking if the video is still available"
-                    else:
-                        msg = f"❌ Could not download video: {error_msg}"
-                    await waha_service.send_text_message(from_number, msg)
-                    return
-
-                file_size = download_result.file_size_mb or 0
-                logger.info("Video downloaded", file_size_mb=file_size)
-
-                # Record in database
-                try:
-                    user_id = db_service.get_or_create_user(from_number)
-                    db_service.record_download(
-                        user_id, url, download_result.title or "Unknown", file_size
-                    )
-                except Exception as e:
-                    logger.error("Error recording download", error=str(e))
-
-                try:
-                    # Attempt to send video directly if small enough
-                    cloudinary_url = None
-                    video_sent_to_chat = False
-
-                    if file_size < settings.max_file_size_mb:
-                        logger.info("Video is small, attempting direct send", size_mb=file_size)
-                        await waha_service.send_text_message(
-                            from_number,
-                            "🎥 Here's your video! Uploading to Cloudinary for a shareable link...",
-                        )
-
-                        # Try to send video
-                        try:
-                            success = await waha_service.send_video_message(
-                                from_number, download_result.local_path
-                            )
-                            if success:
-                                video_sent_to_chat = True
-                                logger.info("Video sent successfully to chat")
-                                await waha_service.send_text_message(
-                                    from_number, "✅ Video sent successfully to chat!"
-                                )
-                        except Exception as e:
-                            logger.error("Error sending video", error=str(e))
-                            await waha_service.send_text_message(
-                                from_number,
-                                f"⚠️ Could not send video directly ({file_size:.2f} MB). Uploading to Cloudinary...",
-                            )
-
-                        # Upload to Cloudinary
-                        try:
-                            cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
-                                download_result.local_path
-                            )
-                            logger.info("Cloudinary upload complete", url=cloudinary_url)
-                        except Exception as e:
-                            logger.error("Cloudinary upload failed", error=str(e))
-                    else:
-                        logger.info(
-                            "Video is too large, uploading to Cloudinary only", size_mb=file_size
-                        )
-                        await waha_service.send_text_message(
-                            from_number,
-                            f"📤 Video is {file_size:.2f} MB - uploading to Cloudinary for a shareable link...",
-                        )
-
-                        try:
-                            cloudinary_url, _ = await cloud_service.async_upload_to_cloudinary(
-                                download_result.local_path
-                            )
-                            logger.info("Cloudinary upload complete", url=cloudinary_url)
-                        except Exception as e:
-                            logger.error("Cloudinary upload failed", error=str(e))
-                            cloudinary_url = None
-
-                    # Send Cloudinary link if available
-                    if cloudinary_url:
-                        if video_sent_to_chat:
-                            message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}"
-                        else:
-                            message = f"☁️ Cloudinary Link ({file_size:.2f} MB):\n{cloudinary_url}\n\nNote: Video was too large to send directly in chat."
-                        await waha_service.send_text_message(from_number, message)
-                    else:
-                        if video_sent_to_chat:
-                            await waha_service.send_text_message(
-                                from_number, "✅ Video sent to chat! (Cloudinary upload failed)"
-                            )
-                        else:
-                            await waha_service.send_text_message(
-                                from_number, "❌ Error: Could not upload to Cloudinary."
-                            )
-                finally:
-                    # Always clean up local file after processing
-                    _cleanup_local_file(download_result.local_path)
-
-    except Exception as e:
-        logger.error("Error in message update handler", error=str(e))
-
-
 @router.get(
     "/",
     response_model=Dict[str, str],
@@ -361,7 +244,18 @@ async def root() -> Dict[str, str]:
     "/health", response_model=HealthResponse, summary="Detailed Health Status", tags=["Health"]
 )
 async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
-    """Get detailed health status."""
+    """Cheap health status for container/runtime checks."""
+    return HealthResponse(status="healthy", version="0.1.0", waha_healthy=None)
+
+
+@router.get(
+    "/health/waha",
+    response_model=HealthResponse,
+    summary="WAHA Health Status",
+    tags=["Health"],
+)
+async def waha_health(settings: Settings = Depends(get_settings)) -> HealthResponse:
+    """Get detailed WAHA health status on demand."""
     waha_service = WAHAService(settings)
     try:
         waha_healthy = await waha_service.health_check()
@@ -371,6 +265,12 @@ async def health(settings: Settings = Depends(get_settings)) -> HealthResponse:
     return HealthResponse(
         status="healthy" if waha_healthy else "degraded", version="0.1.0", waha_healthy=waha_healthy
     )
+
+
+@router.get("/live", response_model=Dict[str, str], summary="Liveness Check", tags=["Health"])
+async def live() -> Dict[str, str]:
+    """Cheap liveness check."""
+    return {"status": "ok"}
 
 
 @router.get(
@@ -420,20 +320,16 @@ async def receive_webhook(
 ) -> WebhookResponse:
     """Handle incoming webhooks from WAHA."""
     try:
-        # Read raw body for debugging, then parse JSON
-        raw_body = await request.body()
+        if not _webhook_is_authorized(request, settings):
+            logger.warning("Rejected unauthorized webhook")
+            raise HTTPException(status_code=401, detail="Unauthorized webhook")
+
         try:
             body = await request.json()
         except Exception:
-            body = None
+            raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-        # Print raw payload to stdout so it appears directly in container logs
-        try:
-            print("RAW_WEBHOOK_BODY:", raw_body.decode(errors="replace"))
-        except Exception:
-            print("RAW_WEBHOOK_BODY: <binary>")
-
-        logger.info("Received webhook payload", payload=body)
+        logger.info("Received webhook payload")
 
         waha_service = WAHAService(settings)
         db_service = DatabaseService(settings)
@@ -465,41 +361,6 @@ async def receive_webhook(
                     payload, waha_service, db_service, cloud_service, settings
                 )
 
-            # Also keep support for old format if needed
-            elif "data" in body:
-                value = body["data"]
-
-                # Check if this is a message
-                if "messages" in value:
-                    logger.info("Received new message (old format)")
-
-                    # Check for duplicate messages
-                    message = value.get("messages", [{}])[0]
-                    message_id = message.get("id")
-
-                    if message_id:
-                        if message_id in message_cache:
-                            last_processed = message_cache[message_id]
-                            if time.time() - last_processed < MESSAGE_CACHE_TTL:
-                                logger.info(
-                                    "Duplicate message detected, skipping", message_id=message_id
-                                )
-                                return WebhookResponse(status="ok")
-
-                        # Update cache
-                        message_cache[message_id] = time.time()
-
-                        # Clean old cache entries
-                        cleanup_message_cache()
-
-                    # Handle the message
-                    await handle_message_update(
-                        value, waha_service, db_service, cloud_service, settings
-                    )
-
-                elif "statuses" in value:
-                    logger.info("Received status update")
-
             else:
                 logger.warning("Unrecognized webhook format", keys=list(body.keys()))
 
@@ -507,6 +368,8 @@ async def receive_webhook(
         finally:
             await waha_service.close()
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Error in webhook handler", error=str(e))
         return WebhookResponse(status="error", message=str(e))
