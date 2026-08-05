@@ -101,27 +101,26 @@ class WAHAService:
             return False
 
     async def send_video_message(self, phone_number: str, video_path: str) -> bool:
-        """Send a video message via WAHA using sendFile endpoint."""
-        import base64
+        """Send a video message via WAHA using multipart streaming upload."""
         import os
 
         try:
-            # Read and encode video file as base64
-            with open(video_path, "rb") as f:
-                video_data = base64.b64encode(f.read()).decode("utf-8")
-
-            # Get filename from path
             filename = os.path.basename(video_path)
 
-            # Send video using sendFile endpoint (compatible with WEBJS engine)
-            response = await self.client.post(
-                "/api/sendFile",
-                json={
-                    "chatId": phone_number,
-                    "file": {"mimetype": "video/mp4", "filename": filename, "data": video_data},
-                    "session": self.session_name,
-                },
-            )
+            # Stream the file directly as multipart — avoids loading the entire video
+            # into memory and the +33% base64 size overhead that can bust body limits.
+            with open(video_path, "rb") as video_file:
+                response = await self.client.post(
+                    "/api/sendFile",
+                    data={
+                        "chatId": phone_number,
+                        "session": self.session_name,
+                    },
+                    files={
+                        "file": (filename, video_file, "video/mp4"),
+                    },
+                    timeout=120.0,  # Large files need more time than the default 30s
+                )
 
             if response.status_code in (200, 201):
                 logger.info("Video message sent", phone_number=phone_number, file=video_path)

@@ -193,7 +193,14 @@ async def download_video(
     work_dir = tempfile.mkdtemp(prefix="wabotii_download_", dir="downloads")
 
     ydl_opts = {
-        "format": "bestvideo*[protocol^=http]+bestaudio[protocol^=http]/best[protocol^=http]/best",
+        # Prefer H.264 (avc1) video + AAC (mp4a) audio — natively supported by all
+        # iOS/Android WhatsApp clients. Falls back progressively if unavailable.
+        "format": (
+            "bestvideo[vcodec^=avc1][protocol^=http]+bestaudio[acodec^=mp4a][protocol^=http]"
+            "/bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]"
+            "/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+            "/best[ext=mp4]/best"
+        ),
         "outtmpl": os.path.join(work_dir, "original_%(id)s.%(ext)s"),
         "quiet": False,
         "no_warnings": False,
@@ -204,6 +211,10 @@ async def download_video(
                 "preferedformat": "mp4",
             },
         ],
+        # Move moov atom to start of file so WhatsApp can stream without downloading fully
+        "postprocessor_args": {
+            "ffmpeg": ["-movflags", "+faststart"],
+        },
         "verbose": False,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.70 Safari/537.36",
     }
