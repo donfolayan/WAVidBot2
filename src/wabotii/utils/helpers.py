@@ -40,6 +40,12 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             decoded = base64.b64decode(youtube_cookies_content)
             if not decoded.startswith(b"# Netscape HTTP Cookie File"):
                 logger.warning("Decoded YouTube cookies file does not start with Netscape header")
+            # Normalize to UTF-8: cookie files from Windows browsers may be latin-1/windows-1252
+            try:
+                decoded.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded = decoded.decode("latin-1").encode("utf-8")
+                logger.warning("YouTube cookie file re-encoded from latin-1 to UTF-8")
             # Create a secure temporary file for cookies to avoid leaking secrets
             tf = tempfile.NamedTemporaryFile(delete=False, prefix="youtube_cookies_", suffix=".txt")
             tf.write(decoded)
@@ -60,6 +66,12 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             decoded = base64.b64decode(facebook_cookies_content)
             if not decoded.startswith(b"# Netscape HTTP Cookie File"):
                 logger.warning("Decoded Facebook cookies file does not start with Netscape header")
+            # Normalize to UTF-8: cookie files from Windows browsers may be latin-1/windows-1252
+            try:
+                decoded.decode("utf-8")
+            except UnicodeDecodeError:
+                decoded = decoded.decode("latin-1").encode("utf-8")
+                logger.warning("Facebook cookie file re-encoded from latin-1 to UTF-8")
             tf = tempfile.NamedTemporaryFile(
                 delete=False, prefix="facebook_cookies_", suffix=".txt"
             )

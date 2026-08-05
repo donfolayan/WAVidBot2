@@ -241,6 +241,12 @@ async def download_video(
             error_msg = "Video is private"
         elif "sign in to view" in error_str:
             error_msg = "Video requires authentication"
+        elif "codec can't decode" in error_str or "unicodedecodeerror" in error_str or "utf-8" in error_str:
+            # Cookie file exported from a Windows browser has non-UTF-8 bytes.
+            # The fix is to re-export cookies from a UTF-8 browser session and update
+            # the YOUTUBE_COOKIES_CONTENT / FACEBOOK_COOKIES_CONTENT env var.
+            error_msg = "Cookie file has an encoding problem. Please re-export your cookies from the browser and update the environment variable."
+            logger.error("Cookie file encoding error — likely latin-1/windows-1252 bytes in cookie values", raw_error=str(e))
         else:
             error_msg = str(e)
         logger.error("yt-dlp download error", error=error_msg)
