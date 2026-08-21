@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from ..config.settings import Settings, get_settings
 from ..services.cloud import CloudinaryService
 from ..services.database import DatabaseService
-from ..services.video import download_video
+from ..services.video import detect_platform, download_video
 from ..services.waha import WAHAService
 from ..utils.helpers import setup_cookies
 from ..utils.logging import get_logger
@@ -132,20 +132,9 @@ Examples:
         url = message_text.strip()
         logger.info("Processing URL", url=url)
 
-        # Validate URL
-        is_valid = any(
-            [
-                url.startswith("https://www.youtube.com"),
-                url.startswith("https://youtube.com"),
-                url.startswith("https://youtu.be"),
-                url.startswith("https://www.facebook.com"),
-                url.startswith("https://facebook.com"),
-                url.startswith("https://fb.watch"),
-                "facebook.com/share" in url,
-            ]
-        )
-
-        if not is_valid:
+        try:
+            detect_platform(url)
+        except ValueError:
             logger.warning("Invalid URL format", url=url)
             await waha_service.send_text_message(
                 from_number, "❌ Please send a valid YouTube or Facebook video URL"
@@ -163,17 +152,20 @@ Examples:
         await waha_service.send_text_message(from_number, "📥 Downloading video...")
 
         # Download video
-        download_result = await download_video(url, youtube_cookies_path, facebook_cookies_path)
+        download_result = await download_video(
+            url,
+            youtube_cookies_path,
+            facebook_cookies_path,
+            timeout_seconds=settings.download_timeout_seconds,
+            max_height=settings.video_max_height,
+            max_download_size_mb=settings.video_max_download_size_mb,
+            max_concurrent_downloads=settings.max_concurrent_downloads,
+        )
 
         if not download_result.local_path or download_result.error:
             logger.error("Download failed", url=url, error=download_result.error)
-            error_msg = download_result.error or "Unknown error"
-            if "checkpoint" in error_msg.lower():
-                msg = "❌ Facebook security checkpoint detected. This video requires authentication.\n\nPlease try:\n• Making sure the video is public\n• Using a direct video link\n• Checking if the video is still available"
-            else:
-                msg = f"❌ Could not download video: {error_msg}"
-
-            await waha_service.send_text_message(from_number, msg)
+            error_msg = download_result.error or "The video could not be downloaded."
+            await waha_service.send_text_message(from_number, f"❌ {error_msg}")
             return
 
         # Check file size
@@ -416,7 +408,15 @@ async def test_download(
         raise HTTPException(status_code=400, detail="No URL provided")
 
     try:
-        result = await download_video(request.url, youtube_cookies_path, facebook_cookies_path)
+        result = await download_video(
+            request.url,
+            youtube_cookies_path,
+            facebook_cookies_path,
+            timeout_seconds=settings.download_timeout_seconds,
+            max_height=settings.video_max_height,
+            max_download_size_mb=settings.video_max_download_size_mb,
+            max_concurrent_downloads=settings.max_concurrent_downloads,
+        )
         return TestDownloadResponse(
             local_path=result.local_path,
             file_size_mb=result.file_size_mb,
