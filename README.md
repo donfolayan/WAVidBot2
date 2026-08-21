@@ -264,12 +264,17 @@ docker-compose restart waha
 
 ### Downloads failing
 - Public videos are attempted without an account first. Cookies are used only as a fallback.
+- The Docker image generates short-lived YouTube proof-of-origin tokens on demand. No static PO
+  token or additional Railway service is required.
+- Facebook retries through gallery-dl when yt-dlp cannot extract the video.
 - Cookie files must be Netscape-format and base64 encoded in the matching environment variable.
 - For durable YouTube cookies, export from a private window and close that window immediately
   after export. Reopening the session can cause YouTube to rotate and invalidate it.
 - Account cookies are only needed for restricted content. They do not fix extractor changes and
   using them for every request increases the risk of account or IP throttling.
 - Keep yt-dlp and its JavaScript support current when YouTube or Facebook changes its pages.
+- Startup logs report whether authenticated cookie names were detected without logging values.
+  Missing `c_user` or `xs` means the Facebook export is not logged in.
 
 ### Cost-conscious defaults
 
