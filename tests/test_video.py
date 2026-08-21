@@ -68,6 +68,34 @@ async def test_download_tries_anonymous_before_cookie(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_youtube_tries_player_clients_before_authenticated_clients(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    cookie_path = tmp_path / "cookies.txt"
+    cookie_path.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    attempts = []
+
+    def fake_download(url, platform, cookie, *args):
+        attempts.append((cookie, args[-1]))
+        raise RuntimeError("Sign in to confirm you're not a bot")
+
+    monkeypatch.setattr(video, "_download_sync", fake_download)
+
+    result = await download_video(
+        "https://youtube.com/watch?v=example",
+        youtube_cookies_path=str(cookie_path),
+        youtube_pot_provider_script_dir="/opt/bgutil-pot-provider",
+    )
+
+    assert result.error_code is DownloadErrorCode.AUTH_REQUIRED
+    assert attempts == [
+        (None, "mweb"),
+        (None, "web_embedded"),
+        (str(cookie_path), "mweb"),
+        (str(cookie_path), "web_creator"),
+    ]
+
+
+@pytest.mark.asyncio
 async def test_download_sanitizes_extractor_errors(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
@@ -176,10 +204,11 @@ def test_download_configures_mweb_pot_provider(monkeypatch, tmp_path):
         720,
         64,
         "/opt/bgutil-pot-provider",
+        "mweb",
     )
 
     assert result["local_path"]
     assert captured_options["extractor_args"] == {
-        "youtube": {"player_client": ["mweb"]},
+        "youtube": {"player_client": ["mweb"], "fetch_pot": ["always"]},
         "youtubepot-bgutilscript": {"server_home": ["/opt/bgutil-pot-provider"]},
     }

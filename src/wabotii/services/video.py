@@ -160,6 +160,7 @@ def _download_sync(
     max_height: int,
     max_download_size_mb: int,
     youtube_pot_provider_script_dir: str,
+    youtube_player_client: Optional[str] = None,
 ) -> dict[str, Any]:
     """Run one blocking yt-dlp attempt."""
     work_dir = tempfile.mkdtemp(prefix=f"wabotii_{platform.value}_", dir=destination_dir)
@@ -194,9 +195,12 @@ def _download_sync(
     # extractor can make otherwise-good requests less reliable.
     if platform is VideoPlatform.FACEBOOK:
         ydl_opts["impersonate"] = ImpersonateTarget()
-    elif youtube_pot_provider_script_dir:
+    elif youtube_pot_provider_script_dir and youtube_player_client:
         ydl_opts["extractor_args"] = {
-            "youtube": {"player_client": ["mweb"]},
+            "youtube": {
+                "player_client": [youtube_player_client],
+                "fetch_pot": ["always"],
+            },
             "youtubepot-bgutilscript": {
                 "server_home": [youtube_pot_provider_script_dir]
             },
@@ -341,15 +345,29 @@ async def download_video(
     )
     # Public media should not risk or depend on a personal account. Authentication
     # becomes a fallback only when an anonymous extraction fails.
-    attempts: list[Optional[str]] = [None]
-    if cookie_path and os.path.isfile(cookie_path):
-        attempts.append(cookie_path)
+    has_cookies = bool(cookie_path and os.path.isfile(cookie_path))
+    if platform is VideoPlatform.YOUTUBE and youtube_pot_provider_script_dir:
+        attempts: list[tuple[Optional[str], Optional[str]]] = [
+            (None, "mweb"),
+            (None, "web_embedded"),
+        ]
+        if has_cookies:
+            attempts.extend(
+                [
+                    (cookie_path, "mweb"),
+                    (cookie_path, "web_creator"),
+                ]
+            )
+    else:
+        attempts = [(None, None)]
+        if has_cookies:
+            attempts.append((cookie_path, None))
 
     os.makedirs("downloads", exist_ok=True)
     last_error = "Download failed"
     overall_deadline = time.monotonic() + max(10, timeout_seconds)
     async with _limiter(max_concurrent_downloads):
-        for attempt_number, attempt_cookie in enumerate(attempts, start=1):
+        for attempt_number, (attempt_cookie, youtube_client) in enumerate(attempts, start=1):
             remaining_seconds = int(overall_deadline - time.monotonic())
             if remaining_seconds <= 0:
                 last_error = "Download deadline exceeded"
@@ -359,6 +377,7 @@ async def download_video(
                 platform=platform.value,
                 attempt=attempt_number,
                 authenticated=bool(attempt_cookie),
+                youtube_client=youtube_client,
             )
             try:
                 result = await asyncio.to_thread(
@@ -371,6 +390,7 @@ async def download_video(
                     max(144, max_height),
                     max(1, max_download_size_mb),
                     youtube_pot_provider_script_dir,
+                    youtube_client,
                 )
                 return VideoDownloadResult(**result)
             except Exception as exc:
@@ -380,6 +400,7 @@ async def download_video(
                     platform=platform.value,
                     attempt=attempt_number,
                     authenticated=bool(attempt_cookie),
+                    youtube_client=youtube_client,
                     error=last_error,
                 )
                 if attempt_cookie is None and len(attempts) > 1 and not _could_benefit_from_cookies(last_error):
