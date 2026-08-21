@@ -108,6 +108,9 @@ FILE_RETENTION_HOURS=24     # Delete local files after 24 hours
 CLOUDINARY_RETENTION_HOURS=24
 CLOUDINARY_CLEANUP_INTERVAL_HOURS=24
 MAX_FILE_SIZE_MB=16         # Send directly if smaller
+VIDEO_MAX_HEIGHT=720        # Avoid costly high-resolution downloads/merges
+VIDEO_MAX_DOWNLOAD_SIZE_MB=64
+MAX_CONCURRENT_DOWNLOADS=1  # Bound CPU, RAM, and network use
 ```
 
 See `.env.example` for all available options.
@@ -260,9 +263,21 @@ docker-compose restart waha
 ```
 
 ### Downloads failing
-- Check Facebook checkpoint: bot warns if security checkpoint detected
-- Check yt-dlp logs: `DEV_MODE=true` for verbose output
-- Ensure cookies are set if authentication required
+- Public videos are attempted without an account first. Cookies are used only as a fallback.
+- Cookie files must be Netscape-format and base64 encoded in the matching environment variable.
+- For durable YouTube cookies, export from a private window and close that window immediately
+  after export. Reopening the session can cause YouTube to rotate and invalidate it.
+- Account cookies are only needed for restricted content. They do not fix extractor changes and
+  using them for every request increases the risk of account or IP throttling.
+- Keep yt-dlp and its JavaScript support current when YouTube or Facebook changes its pages.
+
+### Cost-conscious defaults
+
+The bot downloads at most 720p/64 MB, processes one download at a time, prefers a ready-to-send
+H.264 MP4, and uploads to Cloudinary only when direct WhatsApp delivery fails. These defaults keep
+memory, bandwidth, ffmpeg work, and cloud storage bounded. See
+[`docs/downloader-architecture.md`](docs/downloader-architecture.md) before raising the limits or
+adding another downloader service.
 
 ### Cloudinary errors
 - Verify `CLOUDINARY_API_KEY` and `CLOUDINARY_API_SECRET`
