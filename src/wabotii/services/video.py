@@ -3,6 +3,8 @@
 import asyncio
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -69,14 +71,21 @@ def detect_platform(url: str) -> VideoPlatform:
 
 def _format_selector(max_height: int, max_download_size_mb: int) -> str:
     """Prefer a ready-to-send MP4 before formats that require an ffmpeg merge."""
-    size_filter = (
+    single_file_filter = (
         f"[filesize<?{max_download_size_mb}M][filesize_approx<?{max_download_size_mb}M]"
     )
+    # A 50/50 split rejects normal low-bitrate audio/video pairs because sizes
+    # are reported in MiB while yt-dlp's M suffix is decimal. The final hard
+    # byte check still enforces the combined limit after merging.
+    component_limit_mb = max(1, (max_download_size_mb * 3) // 4)
+    component_filter = (
+        f"[filesize<?{component_limit_mb}M][filesize_approx<?{component_limit_mb}M]"
+    )
     return (
-        f"best[ext=mp4][vcodec^=avc1][height<={max_height}]{size_filter}"
-        f"/bestvideo[ext=mp4][vcodec^=avc1][height<={max_height}]{size_filter}"
-        f"+bestaudio[ext=m4a]{size_filter}"
-        f"/best[height<={max_height}]{size_filter}/best{size_filter}"
+        f"best[ext=mp4][vcodec^=avc1][height<={max_height}]{single_file_filter}"
+        f"/bestvideo[ext=mp4][vcodec^=avc1][height<={max_height}]{component_filter}"
+        f"+bestaudio[ext=m4a]{component_filter}"
+        f"/best[height<={max_height}]{single_file_filter}/best{single_file_filter}"
     )
 
 
@@ -134,7 +143,7 @@ def _find_downloaded_file(work_dir: str) -> Path:
     """Find yt-dlp's final output without relying on a pre-merge filename."""
     candidates = [
         path
-        for path in Path(work_dir).iterdir()
+        for path in Path(work_dir).rglob("*")
         if path.is_file() and path.suffix not in {".part", ".ytdl"}
     ]
     if not candidates:
@@ -150,6 +159,7 @@ def _download_sync(
     timeout_seconds: int,
     max_height: int,
     max_download_size_mb: int,
+    youtube_pot_provider_script_dir: str,
 ) -> dict[str, Any]:
     """Run one blocking yt-dlp attempt."""
     work_dir = tempfile.mkdtemp(prefix=f"wabotii_{platform.value}_", dir=destination_dir)
@@ -184,6 +194,13 @@ def _download_sync(
     # extractor can make otherwise-good requests less reliable.
     if platform is VideoPlatform.FACEBOOK:
         ydl_opts["impersonate"] = ImpersonateTarget()
+    elif youtube_pot_provider_script_dir:
+        ydl_opts["extractor_args"] = {
+            "youtube": {"player_client": ["mweb"]},
+            "youtubepot-bgutilscript": {
+                "server_home": [youtube_pot_provider_script_dir]
+            },
+        }
     if cookie_path and os.path.isfile(cookie_path):
         ydl_opts["cookiefile"] = cookie_path
 
@@ -194,6 +211,14 @@ def _download_sync(
             raise DownloadError("Download returned no video information")
 
         downloaded_path = _find_downloaded_file(work_dir)
+        requested_downloads = info.get("requested_downloads") or []
+        remaining_outputs = [
+            path
+            for path in Path(work_dir).rglob("*")
+            if path.is_file() and path.suffix not in {".part", ".ytdl"}
+        ]
+        if len(requested_downloads) > 1 and len(remaining_outputs) > 1:
+            raise DownloadError("ffmpeg could not merge the video and audio streams")
         if downloaded_path.stat().st_size <= 0:
             raise DownloadError("The downloaded file is empty")
         if downloaded_path.stat().st_size > max_bytes:
@@ -209,6 +234,67 @@ def _download_sync(
             "file_size_mb": final_path.stat().st_size / (1024 * 1024),
             "title": title,
             "duration": info.get("duration"),
+        }
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _download_facebook_with_gallery_sync(
+    url: str,
+    cookie_path: Optional[str],
+    destination_dir: str,
+    timeout_seconds: int,
+    max_download_size_mb: int,
+) -> dict[str, Any]:
+    """Use gallery-dl as an independent Facebook extraction fallback."""
+    work_dir = tempfile.mkdtemp(prefix="wabotii_facebook_gallery_", dir=destination_dir)
+    max_bytes = max_download_size_mb * 1024 * 1024
+    command = [
+        sys.executable,
+        "-m",
+        "gallery_dl",
+        "--config-ignore",
+        "--destination",
+        work_dir,
+        "--filename",
+        "{id}.{extension}",
+        "--filesize-max",
+        f"{max_download_size_mb}M",
+        "--http-timeout",
+        str(min(30, timeout_seconds)),
+        "--retries",
+        "2",
+    ]
+    if cookie_path and os.path.isfile(cookie_path):
+        command.extend(["--cookies", cookie_path])
+    command.append(url)
+
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=max(10, timeout_seconds),
+            check=False,
+        )
+        try:
+            downloaded_path = _find_downloaded_file(work_dir)
+        except DownloadError as exc:
+            diagnostic = (completed.stderr or completed.stdout or str(exc))[-1000:]
+            raise DownloadError(f"gallery-dl did not produce a video: {diagnostic}") from exc
+
+        if downloaded_path.stat().st_size <= 0:
+            raise DownloadError("The gallery-dl output file is empty")
+        if downloaded_path.stat().st_size > max_bytes:
+            raise DownloadError("Maximum file size exceeded")
+
+        final_path = Path(destination_dir, f"{sanitize_filename('Facebook video')}{downloaded_path.suffix}")
+        shutil.move(str(downloaded_path), final_path)
+        return {
+            "local_path": str(final_path),
+            "file_size_mb": final_path.stat().st_size / (1024 * 1024),
+            "title": "Facebook video",
+            "duration": None,
         }
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -237,6 +323,7 @@ async def download_video(
     max_height: int = 720,
     max_download_size_mb: int = 64,
     max_concurrent_downloads: int = 1,
+    youtube_pot_provider_script_dir: str = "",
 ) -> VideoDownloadResult:
     """Download from YouTube/Facebook anonymously, using cookies only if needed."""
     try:
@@ -260,8 +347,13 @@ async def download_video(
 
     os.makedirs("downloads", exist_ok=True)
     last_error = "Download failed"
+    overall_deadline = time.monotonic() + max(10, timeout_seconds)
     async with _limiter(max_concurrent_downloads):
         for attempt_number, attempt_cookie in enumerate(attempts, start=1):
+            remaining_seconds = int(overall_deadline - time.monotonic())
+            if remaining_seconds <= 0:
+                last_error = "Download deadline exceeded"
+                break
             logger.info(
                 "Starting video download",
                 platform=platform.value,
@@ -275,9 +367,10 @@ async def download_video(
                     platform,
                     attempt_cookie,
                     "downloads",
-                    max(10, timeout_seconds),
+                    remaining_seconds,
                     max(144, max_height),
                     max(1, max_download_size_mb),
+                    youtube_pot_provider_script_dir,
                 )
                 return VideoDownloadResult(**result)
             except Exception as exc:
@@ -291,6 +384,32 @@ async def download_video(
                 )
                 if attempt_cookie is None and len(attempts) > 1 and not _could_benefit_from_cookies(last_error):
                     break
+
+        fallback_error_code, _ = _friendly_error(platform, last_error)
+        if platform is VideoPlatform.FACEBOOK and fallback_error_code not in {
+            DownloadErrorCode.TOO_LARGE,
+            DownloadErrorCode.TIMEOUT,
+            DownloadErrorCode.UNAVAILABLE,
+            DownloadErrorCode.UNSUPPORTED_URL,
+        }:
+            logger.info("Trying gallery-dl Facebook fallback", authenticated=bool(cookie_path))
+            try:
+                remaining_seconds = int(overall_deadline - time.monotonic())
+                if remaining_seconds <= 0:
+                    raise DownloadError("Download deadline exceeded")
+                result = await asyncio.to_thread(
+                    _download_facebook_with_gallery_sync,
+                    url,
+                    cookie_path,
+                    "downloads",
+                    remaining_seconds,
+                    max(1, max_download_size_mb),
+                )
+                return VideoDownloadResult(**result)
+            except Exception as exc:
+                logger.warning("gallery-dl Facebook fallback failed", error=str(exc))
+                if "deadline exceeded" in str(exc).lower():
+                    last_error = str(exc)
 
     error_code, message = _friendly_error(platform, last_error)
     logger.error("Video download failed", platform=platform.value, error_code=error_code.value)

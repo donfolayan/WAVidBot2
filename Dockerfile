@@ -1,3 +1,6 @@
+ARG BGUTIL_VERSION=1.3.2
+FROM brainicism/bgutil-ytdlp-pot-provider:${BGUTIL_VERSION}-deno AS pot-provider
+
 # Use official Python runtime as parent image
 FROM python:3.12-slim-bookworm
 
@@ -26,6 +29,12 @@ ENV PATH="/app/.venv/bin:$PATH"
 # Copy remaining application files (legal pages, etc.)
 COPY legal ./legal
 
+# Bundle only the runtime files for the proof-of-origin provider. yt-dlp starts
+# it only for a YouTube request, avoiding another Railway service and idle process.
+COPY --from=pot-provider /app/node_modules /opt/bgutil-pot-provider/node_modules
+COPY --from=pot-provider /app/src /opt/bgutil-pot-provider/src
+COPY --from=pot-provider /app/package.json /app/deno.lock /opt/bgutil-pot-provider/
+
 # Create downloads directory (required for StaticFiles mount at startup)
 RUN mkdir -p downloads
 
@@ -33,6 +42,7 @@ RUN mkdir -p downloads
 ENV FFMPEG_PATH=ffmpeg
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8080
+ENV YOUTUBE_POT_PROVIDER_SCRIPT_DIR=/opt/bgutil-pot-provider
 
 # Expose port
 EXPOSE 8080

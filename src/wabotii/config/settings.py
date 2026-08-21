@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     video_max_height: int = Field(default=720, alias="VIDEO_MAX_HEIGHT")
     video_max_download_size_mb: int = Field(default=64, alias="VIDEO_MAX_DOWNLOAD_SIZE_MB")
     max_concurrent_downloads: int = Field(default=1, alias="MAX_CONCURRENT_DOWNLOADS")
+    youtube_pot_provider_script_dir: str = Field(
+        default="", alias="YOUTUBE_POT_PROVIDER_SCRIPT_DIR"
+    )
 
     # Optional Cookie Files (base64 encoded)
     youtube_cookies_content: str = Field(default="", alias="YOUTUBE_COOKIES_CONTENT")

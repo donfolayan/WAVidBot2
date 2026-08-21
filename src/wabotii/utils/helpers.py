@@ -12,6 +12,42 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 
+def cookie_names(cookie_data: bytes) -> set[str]:
+    """Read cookie names from Netscape data without exposing their values."""
+    names: set[str] = set()
+    text = cookie_data.decode("utf-8", errors="replace")
+    for line in text.splitlines():
+        if not line or (line.startswith("#") and not line.startswith("#HttpOnly_")):
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 7:
+            names.add(fields[5])
+    return names
+
+
+def log_cookie_session_status(platform: str, cookie_data: bytes) -> None:
+    """Log whether an exported cookie set contains the platform login session."""
+    names = cookie_names(cookie_data)
+    required = {
+        "youtube": {"SAPISID", "__Secure-3PAPISID", "LOGIN_INFO"},
+        "facebook": {"c_user", "xs"},
+    }[platform]
+    missing = sorted(required - names)
+    if missing:
+        logger.warning(
+            "Cookie file may not contain an authenticated session",
+            platform=platform,
+            cookie_count=len(names),
+            missing_cookie_names=missing,
+        )
+    else:
+        logger.info(
+            "Authenticated cookie session detected",
+            platform=platform,
+            cookie_count=len(names),
+        )
+
+
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename by removing special characters and emojis."""
     # Remove special characters and emojis
@@ -46,6 +82,7 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             except UnicodeDecodeError:
                 decoded = decoded.decode("latin-1").encode("utf-8")
                 logger.warning("YouTube cookie file re-encoded from latin-1 to UTF-8")
+            log_cookie_session_status("youtube", decoded)
             # Create a secure temporary file for cookies to avoid leaking secrets
             tf = tempfile.NamedTemporaryFile(delete=False, prefix="youtube_cookies_", suffix=".txt")
             tf.write(decoded)
@@ -72,6 +109,7 @@ def setup_cookies() -> tuple[Optional[str], Optional[str]]:
             except UnicodeDecodeError:
                 decoded = decoded.decode("latin-1").encode("utf-8")
                 logger.warning("Facebook cookie file re-encoded from latin-1 to UTF-8")
+            log_cookie_session_status("facebook", decoded)
             tf = tempfile.NamedTemporaryFile(
                 delete=False, prefix="facebook_cookies_", suffix=".txt"
             )

@@ -2,7 +2,7 @@
 
 import os
 
-from src.wabotii.utils.helpers import sanitize_filename, setup_cookies
+from src.wabotii.utils.helpers import cookie_names, sanitize_filename, setup_cookies
 
 
 def test_sanitize_filename():
@@ -36,3 +36,13 @@ def test_setup_cookies_no_env():
     youtube_path, facebook_path = setup_cookies()
     assert youtube_path is None
     assert facebook_path is None
+
+
+def test_cookie_names_reads_netscape_and_http_only_entries():
+    cookie_data = (
+        b"# Netscape HTTP Cookie File\n"
+        b".facebook.com\tTRUE\t/\tTRUE\t0\tc_user\tsecret\n"
+        b"#HttpOnly_.facebook.com\tTRUE\t/\tTRUE\t0\txs\tsecret\n"
+    )
+
+    assert cookie_names(cookie_data) == {"c_user", "xs"}
