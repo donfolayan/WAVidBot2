@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     youtube_pot_provider_script_dir: str = Field(
         default="", alias="YOUTUBE_POT_PROVIDER_SCRIPT_DIR"
     )
+    youtube_proxy_url: str = Field(default="", alias="YOUTUBE_PROXY_URL")
 
     # Optional Cookie Files (base64 encoded)
     youtube_cookies_content: str = Field(default="", alias="YOUTUBE_COOKIES_CONTENT")

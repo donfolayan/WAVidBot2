@@ -75,7 +75,7 @@ async def test_youtube_tries_player_clients_before_authenticated_clients(monkeyp
     attempts = []
 
     def fake_download(url, platform, cookie, *args):
-        attempts.append((cookie, args[-1]))
+        attempts.append((cookie, args[-2]))
         raise RuntimeError("Sign in to confirm you're not a bot")
 
     monkeypatch.setattr(video, "_download_sync", fake_download)
@@ -171,6 +171,14 @@ def test_find_downloaded_file_ignores_partial_files(tmp_path):
     assert video._find_downloaded_file(str(tmp_path)) == Path(expected)
 
 
+def test_proxy_credentials_are_redacted():
+    proxy = "http://user:secret@proxy.example:8080"
+
+    assert video._redact_proxy(f"Could not connect to {proxy}", proxy) == (
+        "Could not connect to <redacted YouTube proxy>"
+    )
+
+
 def test_download_configures_mweb_pot_provider(monkeypatch, tmp_path):
     captured_options = {}
 
@@ -205,6 +213,7 @@ def test_download_configures_mweb_pot_provider(monkeypatch, tmp_path):
         64,
         "/opt/bgutil-pot-provider",
         "mweb",
+        "socks5://proxy.example:1080",
     )
 
     assert result["local_path"]
@@ -212,3 +221,4 @@ def test_download_configures_mweb_pot_provider(monkeypatch, tmp_path):
         "youtube": {"player_client": ["mweb"], "fetch_pot": ["always"]},
         "youtubepot-bgutilscript": {"server_home": ["/opt/bgutil-pot-provider"]},
     }
+    assert captured_options["proxy"] == "socks5://proxy.example:1080"

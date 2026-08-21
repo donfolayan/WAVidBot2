@@ -44,6 +44,11 @@ The important controls are `VIDEO_MAX_HEIGHT`, `VIDEO_MAX_DOWNLOAD_SIZE_MB`,
 `MAX_CONCURRENT_DOWNLOADS`, and `DOWNLOAD_TIMEOUT_SECONDS`. Raising them increases bandwidth,
 temporary disk, peak memory, ffmpeg CPU time, and Cloudinary use.
 
+`YOUTUBE_PROXY_URL` is an optional last-resort control for data-center IP reputation failures. It
+must be a sticky residential/ISP HTTP, HTTPS, or SOCKS5 proxy so extraction, token generation, and
+media transfer share one exit IP. It applies only to YouTube to avoid paying proxy bandwidth for
+Facebook, WhatsApp, Cloudinary, and health traffic.
+
 For a small family bot, run the FastAPI app and WAHA on one small persistent host with a local
 volume. Two separately billed always-on services generally cost more and make WAHA session
 persistence harder. Scale the downloader out only after queue time, CPU, or memory measurements

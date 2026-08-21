@@ -161,6 +161,7 @@ Examples:
             max_download_size_mb=settings.video_max_download_size_mb,
             max_concurrent_downloads=settings.max_concurrent_downloads,
             youtube_pot_provider_script_dir=settings.youtube_pot_provider_script_dir,
+            youtube_proxy_url=settings.youtube_proxy_url,
         )
 
         if not download_result.local_path or download_result.error:
@@ -418,6 +419,7 @@ async def test_download(
             max_download_size_mb=settings.video_max_download_size_mb,
             max_concurrent_downloads=settings.max_concurrent_downloads,
             youtube_pot_provider_script_dir=settings.youtube_pot_provider_script_dir,
+            youtube_proxy_url=settings.youtube_proxy_url,
         )
         return TestDownloadResponse(
             local_path=result.local_path,

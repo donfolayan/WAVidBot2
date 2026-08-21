@@ -139,6 +139,27 @@ def _could_benefit_from_cookies(raw_error: str) -> bool:
     )
 
 
+def _redact_proxy(raw_error: str, proxy_url: str) -> str:
+    """Prevent proxy credentials from appearing in application logs."""
+    return raw_error.replace(proxy_url, "<redacted YouTube proxy>") if proxy_url else raw_error
+
+
+class _YtDlpLogger:
+    """Keep yt-dlp output structured and redact proxy credentials."""
+
+    def __init__(self, proxy_url: str) -> None:
+        self.proxy_url = proxy_url
+
+    def debug(self, message: str) -> None:
+        logger.debug("yt-dlp", message=_redact_proxy(message, self.proxy_url))
+
+    def warning(self, message: str) -> None:
+        logger.warning("yt-dlp warning", message=_redact_proxy(message, self.proxy_url))
+
+    def error(self, message: str) -> None:
+        logger.debug("yt-dlp error", message=_redact_proxy(message, self.proxy_url))
+
+
 def _find_downloaded_file(work_dir: str) -> Path:
     """Find yt-dlp's final output without relying on a pre-merge filename."""
     candidates = [
@@ -161,6 +182,7 @@ def _download_sync(
     max_download_size_mb: int,
     youtube_pot_provider_script_dir: str,
     youtube_player_client: Optional[str] = None,
+    youtube_proxy_url: str = "",
 ) -> dict[str, Any]:
     """Run one blocking yt-dlp attempt."""
     work_dir = tempfile.mkdtemp(prefix=f"wabotii_{platform.value}_", dir=destination_dir)
@@ -189,6 +211,7 @@ def _download_sync(
         "concurrent_fragment_downloads": 1,
         "progress_hooks": [enforce_limits],
         "postprocessor_hooks": [enforce_limits],
+        "logger": _YtDlpLogger(youtube_proxy_url),
     }
 
     # Browser TLS impersonation materially helps Facebook, but forcing it for every
@@ -205,6 +228,10 @@ def _download_sync(
                 "server_home": [youtube_pot_provider_script_dir]
             },
         }
+    if platform is VideoPlatform.YOUTUBE and youtube_proxy_url:
+        # The token generator receives yt-dlp's request proxy automatically,
+        # keeping the token and media requests bound to the same exit IP.
+        ydl_opts["proxy"] = youtube_proxy_url
     if cookie_path and os.path.isfile(cookie_path):
         ydl_opts["cookiefile"] = cookie_path
 
@@ -328,6 +355,7 @@ async def download_video(
     max_download_size_mb: int = 64,
     max_concurrent_downloads: int = 1,
     youtube_pot_provider_script_dir: str = "",
+    youtube_proxy_url: str = "",
 ) -> VideoDownloadResult:
     """Download from YouTube/Facebook anonymously, using cookies only if needed."""
     try:
@@ -378,6 +406,7 @@ async def download_video(
                 attempt=attempt_number,
                 authenticated=bool(attempt_cookie),
                 youtube_client=youtube_client,
+                proxied=bool(youtube_proxy_url),
             )
             try:
                 result = await asyncio.to_thread(
@@ -391,10 +420,11 @@ async def download_video(
                     max(1, max_download_size_mb),
                     youtube_pot_provider_script_dir,
                     youtube_client,
+                    youtube_proxy_url,
                 )
                 return VideoDownloadResult(**result)
             except Exception as exc:
-                last_error = str(exc)
+                last_error = _redact_proxy(str(exc), youtube_proxy_url)
                 logger.warning(
                     "Video download attempt failed",
                     platform=platform.value,

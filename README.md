@@ -111,6 +111,7 @@ MAX_FILE_SIZE_MB=16         # Send directly if smaller
 VIDEO_MAX_HEIGHT=720        # Avoid costly high-resolution downloads/merges
 VIDEO_MAX_DOWNLOAD_SIZE_MB=64
 MAX_CONCURRENT_DOWNLOADS=1  # Bound CPU, RAM, and network use
+YOUTUBE_PROXY_URL=           # Optional sticky residential/ISP HTTP or SOCKS5 proxy
 ```
 
 See `.env.example` for all available options.
@@ -275,6 +276,9 @@ docker-compose restart waha
 - Keep yt-dlp and its JavaScript support current when YouTube or Facebook changes its pages.
 - Startup logs report whether authenticated cookie names were detected without logging values.
   Missing `c_user` or `xs` means the Facebook export is not logged in.
+- If a hosting provider's outbound IP is blocked by YouTube, set `YOUTUBE_PROXY_URL` to a sticky
+  residential/ISP proxy. The bot applies it only to YouTube and uses the same exit for PO-token
+  generation and video requests. Store the URL as a Railway secret; it can contain credentials.
 
 ### Cost-conscious defaults
 
