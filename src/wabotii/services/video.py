@@ -1,7 +1,6 @@
 """Cost-conscious video downloads with resilient yt-dlp defaults."""
 
 import asyncio
-import json
 import os
 import shutil
 import subprocess
@@ -173,41 +172,8 @@ def _find_downloaded_file(work_dir: str) -> Path:
     return max(candidates, key=lambda path: path.stat().st_size)
 
 
-def _audio_profile(path: Path) -> Optional[str]:
-    """Return the first audio stream profile without decoding the media."""
-    try:
-        completed = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-select_streams",
-                "a:0",
-                "-show_entries",
-                "stream=profile",
-                "-of",
-                "json",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-        if completed.returncode != 0:
-            return None
-        streams = json.loads(completed.stdout or "{}").get("streams", [])
-        return streams[0].get("profile") if streams else None
-    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
-        return None
-
-
 def _normalize_facebook_audio(path: Path, deadline: float) -> Path:
-    """Create a WhatsApp-ready H.264/AAC-LC MP4 for Facebook HE-AAC media."""
-    profile = _audio_profile(path)
-    if not profile or not profile.upper().startswith("HE-AAC"):
-        return path
-
+    """Always replace Facebook audio with WhatsApp-compatible AAC-LC."""
     remaining_seconds = int(deadline - time.monotonic())
     if remaining_seconds <= 0:
         raise DownloadError("Download deadline exceeded")
@@ -227,19 +193,15 @@ def _normalize_facebook_audio(path: Path, deadline: float) -> Path:
             "-map",
             "0:a:0",
             "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "26",
-            "-pix_fmt",
-            "yuv420p",
+            "copy",
             "-c:a",
             "aac",
             "-profile:a",
             "aac_low",
             "-b:a",
-            "128k",
+            # Keep the final file below WhatsApp's practical 16 MB media limit.
+            # The source track is about 48 kbps, so 64 kbps avoids needless growth.
+            "64k",
             "-ar",
             "48000",
             "-ac",
@@ -258,7 +220,7 @@ def _normalize_facebook_audio(path: Path, deadline: float) -> Path:
         raise DownloadError(f"Could not normalize Facebook audio: {diagnostic}")
 
     path.unlink(missing_ok=True)
-    logger.info("Normalized Facebook audio for WhatsApp", source_profile=profile)
+    logger.info("Normalized Facebook audio for WhatsApp", audio_codec="AAC-LC")
     return output_path
 
 

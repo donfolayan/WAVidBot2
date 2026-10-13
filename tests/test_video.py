@@ -172,10 +172,9 @@ def test_find_downloaded_file_ignores_partial_files(tmp_path):
     assert video._find_downloaded_file(str(tmp_path)) == Path(expected)
 
 
-def test_facebook_he_aac_audio_is_normalized_without_reencoding_video(monkeypatch, tmp_path):
+def test_facebook_he_aac_audio_is_normalized_for_whatsapp(monkeypatch, tmp_path):
     source = tmp_path / "facebook.mp4"
     source.write_bytes(b"facebook-video")
-    monkeypatch.setattr(video, "_audio_profile", lambda path: "HE-AAC")
     captured_command = []
 
     def fake_run(command, **kwargs):
@@ -190,22 +189,25 @@ def test_facebook_he_aac_audio_is_normalized_without_reencoding_video(monkeypatc
     assert result.name == "facebook.whatsapp.mp4"
     assert result.read_bytes() == b"whatsapp-video-with-aac-lc"
     assert not source.exists()
-    assert captured_command[captured_command.index("-c:v") + 1] == "libx264"
-    assert captured_command[captured_command.index("-crf") + 1] == "26"
+    assert captured_command[captured_command.index("-c:v") + 1] == "copy"
     assert captured_command[captured_command.index("-profile:a") + 1] == "aac_low"
+    assert captured_command[captured_command.index("-b:a") + 1] == "64k"
 
 
-def test_facebook_aac_lc_audio_is_not_rewritten(monkeypatch, tmp_path):
+def test_facebook_aac_lc_audio_is_still_normalized(monkeypatch, tmp_path):
     source = tmp_path / "facebook.mp4"
     source.write_bytes(b"compatible-video")
-    monkeypatch.setattr(video, "_audio_profile", lambda path: "LC")
-    monkeypatch.setattr(
-        video.subprocess,
-        "run",
-        lambda *args, **kwargs: pytest.fail("ffmpeg should not run for AAC-LC audio"),
-    )
 
-    assert video._normalize_facebook_audio(source, video.time.monotonic() + 30) == source
+    def fake_run(command, **kwargs):
+        Path(command[-1]).write_bytes(b"normalized-video")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(video.subprocess, "run", fake_run)
+
+    result = video._normalize_facebook_audio(source, video.time.monotonic() + 30)
+
+    assert result != source
+    assert result.read_bytes() == b"normalized-video"
 
 
 def test_proxy_credentials_are_redacted():
