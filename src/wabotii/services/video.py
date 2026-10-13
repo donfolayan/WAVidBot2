@@ -1,6 +1,7 @@
 """Cost-conscious video downloads with resilient yt-dlp defaults."""
 
 import asyncio
+import json
 import os
 import shutil
 import subprocess
@@ -172,6 +173,89 @@ def _find_downloaded_file(work_dir: str) -> Path:
     return max(candidates, key=lambda path: path.stat().st_size)
 
 
+def _audio_profile(path: Path) -> Optional[str]:
+    """Return the first audio stream profile without decoding the media."""
+    try:
+        completed = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "a:0",
+                "-show_entries",
+                "stream=profile",
+                "-of",
+                "json",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if completed.returncode != 0:
+            return None
+        streams = json.loads(completed.stdout or "{}").get("streams", [])
+        return streams[0].get("profile") if streams else None
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError):
+        return None
+
+
+def _normalize_facebook_audio(path: Path, deadline: float) -> Path:
+    """Convert Facebook HE-AAC audio to the AAC-LC profile WhatsApp preserves."""
+    profile = _audio_profile(path)
+    if not profile or not profile.upper().startswith("HE-AAC"):
+        return path
+
+    remaining_seconds = int(deadline - time.monotonic())
+    if remaining_seconds <= 0:
+        raise DownloadError("Download deadline exceeded")
+
+    output_path = path.with_name(f"{path.stem}.whatsapp.mp4")
+    completed = subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-i",
+            str(path),
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0",
+            "-c:v",
+            "copy",
+            "-c:a",
+            "aac",
+            "-profile:a",
+            "aac_low",
+            "-b:a",
+            "128k",
+            "-ar",
+            "48000",
+            "-ac",
+            "2",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=max(1, remaining_seconds),
+        check=False,
+    )
+    if completed.returncode != 0 or not output_path.is_file() or output_path.stat().st_size <= 0:
+        diagnostic = (completed.stderr or completed.stdout or "ffmpeg produced no output")[-1000:]
+        raise DownloadError(f"Could not normalize Facebook audio: {diagnostic}")
+
+    path.unlink(missing_ok=True)
+    logger.info("Normalized Facebook audio for WhatsApp", source_profile=profile)
+    return output_path
+
+
 def _download_sync(
     url: str,
     platform: VideoPlatform,
@@ -250,6 +334,8 @@ def _download_sync(
         ]
         if len(requested_downloads) > 1 and len(remaining_outputs) > 1:
             raise DownloadError("ffmpeg could not merge the video and audio streams")
+        if platform is VideoPlatform.FACEBOOK and downloaded_path.suffix.lower() == ".mp4":
+            downloaded_path = _normalize_facebook_audio(downloaded_path, deadline)
         if downloaded_path.stat().st_size <= 0:
             raise DownloadError("The downloaded file is empty")
         if downloaded_path.stat().st_size > max_bytes:
