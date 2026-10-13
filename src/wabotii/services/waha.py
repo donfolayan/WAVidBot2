@@ -1,6 +1,9 @@
 """WAHA (WhatsApp HTTP API) service wrapper."""
 
+import asyncio
+import base64
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import httpx
@@ -101,26 +104,29 @@ class WAHAService:
             return False
 
     async def send_video_message(self, phone_number: str, video_path: str) -> bool:
-        """Send a video message via WAHA using multipart streaming upload."""
-        import os
-
+        """Send an MP4 as a WhatsApp video rather than a generic attachment."""
         try:
-            filename = os.path.basename(video_path)
-
-            # Stream the file directly as multipart — avoids loading the entire video
-            # into memory and the +33% base64 size overhead that can bust body limits.
-            with open(video_path, "rb") as video_file:
-                response = await self.client.post(
-                    "/api/sendFile",
-                    data={
-                        "chatId": phone_number,
-                        "session": self.session_name,
+            path = Path(video_path)
+            encoded_video = await asyncio.to_thread(
+                lambda: base64.b64encode(path.read_bytes()).decode("ascii")
+            )
+            response = await self.client.post(
+                "/api/sendVideo",
+                json={
+                    "chatId": phone_number,
+                    "session": self.session_name,
+                    "asNote": False,
+                    "file": {
+                        "filename": path.name,
+                        "mimetype": "video/mp4",
+                        "data": encoded_video,
                     },
-                    files={
-                        "file": (filename, video_file, "video/mp4"),
-                    },
-                    timeout=120.0,  # Large files need more time than the default 30s
-                )
+                    # Downloads already prefer WhatsApp-compatible H.264 MP4. Avoid
+                    # paying the CPU cost of an unnecessary WAHA transcode.
+                    "convert": False,
+                },
+                timeout=120.0,
+            )
 
             if response.status_code in (200, 201):
                 logger.info("Video message sent", phone_number=phone_number, file=video_path)
