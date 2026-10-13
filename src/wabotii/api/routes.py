@@ -183,7 +183,9 @@ Examples:
             success = False
             if file_size_mb <= settings.max_file_size_mb:
                 success = await waha_service.send_video_message(
-                    from_number, download_result.local_path
+                    from_number,
+                    download_result.local_path,
+                    convert=download_result.waha_convert,
                 )
 
             if success:
