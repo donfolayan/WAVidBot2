@@ -103,9 +103,7 @@ class WAHAService:
             logger.error("Error sending text message", phone_number=phone_number, error=str(e))
             return False
 
-    async def send_video_message(
-        self, phone_number: str, video_path: str, *, convert: bool = False
-    ) -> bool:
+    async def send_video_message(self, phone_number: str, video_path: str) -> bool:
         """Send an MP4 as a WhatsApp video rather than a generic attachment."""
         try:
             path = Path(video_path)
@@ -123,9 +121,8 @@ class WAHAService:
                         "mimetype": "video/mp4",
                         "data": encoded_video,
                     },
-                    # Most downloads are already compatible. Only exceptional files
-                    # identified by the downloader pay the WAHA conversion cost.
-                    "convert": convert,
+                    # WABotII prepares WhatsApp-compatible media before delivery.
+                    "convert": False,
                 },
                 timeout=120.0,
             )

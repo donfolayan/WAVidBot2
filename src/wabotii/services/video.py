@@ -54,7 +54,6 @@ class VideoDownloadResult:
     duration: Optional[int] = None
     error: Optional[str] = None
     error_code: Optional[DownloadErrorCode] = None
-    waha_convert: bool = False
 
 
 def detect_platform(url: str) -> VideoPlatform:
@@ -203,11 +202,11 @@ def _audio_profile(path: Path) -> Optional[str]:
         return None
 
 
-def _normalize_facebook_audio(path: Path, deadline: float) -> tuple[Path, bool]:
-    """Normalize HE-AAC and flag the file for WAHA's compatibility conversion."""
+def _normalize_facebook_audio(path: Path, deadline: float) -> Path:
+    """Create a WhatsApp-ready H.264/AAC-LC MP4 for Facebook HE-AAC media."""
     profile = _audio_profile(path)
     if not profile or not profile.upper().startswith("HE-AAC"):
-        return path, False
+        return path
 
     remaining_seconds = int(deadline - time.monotonic())
     if remaining_seconds <= 0:
@@ -228,7 +227,13 @@ def _normalize_facebook_audio(path: Path, deadline: float) -> tuple[Path, bool]:
             "-map",
             "0:a:0",
             "-c:v",
-            "copy",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "26",
+            "-pix_fmt",
+            "yuv420p",
             "-c:a",
             "aac",
             "-profile:a",
@@ -254,7 +259,7 @@ def _normalize_facebook_audio(path: Path, deadline: float) -> tuple[Path, bool]:
 
     path.unlink(missing_ok=True)
     logger.info("Normalized Facebook audio for WhatsApp", source_profile=profile)
-    return output_path, True
+    return output_path
 
 
 def _download_sync(
@@ -273,7 +278,6 @@ def _download_sync(
     work_dir = tempfile.mkdtemp(prefix=f"wabotii_{platform.value}_", dir=destination_dir)
     deadline = time.monotonic() + timeout_seconds
     max_bytes = max_download_size_mb * 1024 * 1024
-    waha_convert = False
 
     def enforce_limits(progress: dict[str, Any]) -> None:
         if time.monotonic() > deadline:
@@ -337,7 +341,7 @@ def _download_sync(
         if len(requested_downloads) > 1 and len(remaining_outputs) > 1:
             raise DownloadError("ffmpeg could not merge the video and audio streams")
         if platform is VideoPlatform.FACEBOOK and downloaded_path.suffix.lower() == ".mp4":
-            downloaded_path, waha_convert = _normalize_facebook_audio(downloaded_path, deadline)
+            downloaded_path = _normalize_facebook_audio(downloaded_path, deadline)
         if downloaded_path.stat().st_size <= 0:
             raise DownloadError("The downloaded file is empty")
         if downloaded_path.stat().st_size > max_bytes:
@@ -353,7 +357,6 @@ def _download_sync(
             "file_size_mb": final_path.stat().st_size / (1024 * 1024),
             "title": title,
             "duration": info.get("duration"),
-            "waha_convert": waha_convert,
         }
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)

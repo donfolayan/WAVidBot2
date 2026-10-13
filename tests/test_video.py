@@ -185,15 +185,13 @@ def test_facebook_he_aac_audio_is_normalized_without_reencoding_video(monkeypatc
 
     monkeypatch.setattr(video.subprocess, "run", fake_run)
 
-    result, requires_waha_conversion = video._normalize_facebook_audio(
-        source, video.time.monotonic() + 30
-    )
+    result = video._normalize_facebook_audio(source, video.time.monotonic() + 30)
 
     assert result.name == "facebook.whatsapp.mp4"
-    assert requires_waha_conversion is True
     assert result.read_bytes() == b"whatsapp-video-with-aac-lc"
     assert not source.exists()
-    assert captured_command[captured_command.index("-c:v") + 1] == "copy"
+    assert captured_command[captured_command.index("-c:v") + 1] == "libx264"
+    assert captured_command[captured_command.index("-crf") + 1] == "26"
     assert captured_command[captured_command.index("-profile:a") + 1] == "aac_low"
 
 
@@ -207,10 +205,7 @@ def test_facebook_aac_lc_audio_is_not_rewritten(monkeypatch, tmp_path):
         lambda *args, **kwargs: pytest.fail("ffmpeg should not run for AAC-LC audio"),
     )
 
-    assert video._normalize_facebook_audio(source, video.time.monotonic() + 30) == (
-        source,
-        False,
-    )
+    assert video._normalize_facebook_audio(source, video.time.monotonic() + 30) == source
 
 
 def test_proxy_credentials_are_redacted():

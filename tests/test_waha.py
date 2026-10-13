@@ -47,33 +47,3 @@ async def test_send_video_uses_video_endpoint_and_preserves_file(tmp_path):
     assert payload["convert"] is False
     assert payload["file"]["mimetype"] == "video/mp4"
     assert base64.b64decode(payload["file"]["data"]) == video_bytes
-
-
-@pytest.mark.asyncio
-async def test_send_video_enables_conversion_when_requested(tmp_path):
-    video_path = tmp_path / "facebook-he-aac.mp4"
-    video_path.write_bytes(b"normalized-facebook-video")
-    captured_payload = None
-
-    def handle_request(request: httpx.Request) -> httpx.Response:
-        nonlocal captured_payload
-        captured_payload = json.loads(request.content)
-        return httpx.Response(201, json={"id": "message-id"})
-
-    settings = Settings(WAHA_BASE_URL="https://waha.example")
-    service = WAHAService(settings)
-    await service.client.aclose()
-    service.client = httpx.AsyncClient(
-        base_url=settings.waha_base_url,
-        transport=httpx.MockTransport(handle_request),
-    )
-
-    try:
-        assert await service.send_video_message(
-            "2348000000000@c.us", str(video_path), convert=True
-        )
-    finally:
-        await service.close()
-
-    assert captured_payload is not None
-    assert captured_payload["convert"] is True
